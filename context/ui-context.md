@@ -10,8 +10,8 @@ All colors are defined as CSS custom properties in `globals.css` and mapped to T
 | ---------------- | ---------------------- | ------------------------- | -------------------- |
 | Page background  | `--bg-base`            | `#0B0F19`                 | `bg-base`            |
 | Surface          | `--bg-surface`         | `#161B26`                 | `bg-surface`         |
-| Elevated surface | `--bg-elevated`        | `#A7B0C0`                 | `bg-elevated`        |
-| Subtle surface   | `--bg-subtle`          | `#A7B0C0`                 | `bg-subtle`          |
+| Elevated surface | `--bg-elevated`        | `#1F2635`                 | `bg-elevated`        |
+| Subtle surface   | `--bg-subtle`          | `#262E3F`                 | `bg-subtle`          |
 | Default border   | `--border-default`     | `#2A3447`                 | `border-default`     |
 | Subtle border    | `--border-subtle`      | `#37435C`                 | `border-subtle`      |
 | Primary text     | `--text-primary`       | `#F1F5F9`                 | `text-primary`       |

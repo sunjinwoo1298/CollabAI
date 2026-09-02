@@ -5,7 +5,7 @@ export default function SignUpPage() {
   return (
     <div className="min-h-screen bg-base flex">
       {/* Left Panel - Hidden on small screens */}
-      <div className="hidden lg:flex lg:w-1/2 relative flex-col border-r border-default bg-base">
+      <div className="hidden lg:flex lg:w-1/2 relative flex-col border-r border-default bg-surface">
         {/* Logo at top left */}
         <div className="absolute top-8 left-8 flex items-center gap-3">
           <div className="w-6 h-6 bg-brand rounded-sm"></div>
