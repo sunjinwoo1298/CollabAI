@@ -47,7 +47,7 @@ export default function Home() {
             <header className="flex items-center justify-between border-b border-default pb-4">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Cpu className="text-brand h-6 w-6" /> Ghost AI Design System
+            <Cpu className="text-brand h-6 w-6" /> Collab AI Design System
           </h1>
           <p className="text-sm text-muted">
             Foundation primitives & dark-only design token verification
