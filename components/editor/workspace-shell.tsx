@@ -9,8 +9,8 @@ import { useProjectActions } from "@/hooks/useProjectActions";
 import { CreateProjectDialog } from "@/components/editor/dialogs/create-project-dialog";
 import { RenameProjectDialog } from "@/components/editor/dialogs/rename-project-dialog";
 import { DeleteProjectDialog } from "@/components/editor/dialogs/delete-project-dialog";
+import { ShareDialog } from "@/components/editor/dialogs/share-dialog";
 import { Project } from "@/types/project";
-import { cn } from "@/lib/utils";
 
 interface WorkspaceShellProps {
   project: {
@@ -31,6 +31,7 @@ export function WorkspaceShell({
 }: WorkspaceShellProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isAiSidebarOpen, setIsAiSidebarOpen] = useState(false);
+  const [isShareOpen, setIsShareOpen] = useState(false);
 
   const {
     isCreateOpen,
@@ -63,6 +64,7 @@ export function WorkspaceShell({
         onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
         isAiSidebarOpen={isAiSidebarOpen}
         onToggleAiSidebar={() => setIsAiSidebarOpen((prev) => !prev)}
+        onOpenShare={() => setIsShareOpen(true)}
         showWorkspaceActions={true}
       />
 
@@ -156,6 +158,15 @@ export function WorkspaceShell({
           </aside>
         )}
       </div>
+
+      {/* Share Dialog */}
+      <ShareDialog
+        isOpen={isShareOpen}
+        onClose={() => setIsShareOpen(false)}
+        projectId={project.id}
+        projectName={project.name}
+        isOwner={project.isOwner}
+      />
 
       {/* Project Management Dialogs */}
       <CreateProjectDialog
