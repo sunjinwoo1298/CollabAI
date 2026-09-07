@@ -41,12 +41,17 @@ export async function POST(req: NextRequest) {
 
   try {
     let name = "Untitled Project";
+    let id: string | undefined;
     let description: string | undefined;
 
     try {
       const body = await req.json();
       if (body && typeof body.name === "string" && body.name.trim().length > 0) {
         name = body.name.trim();
+      }
+      const rawId = body?.id || body?.roomId;
+      if (typeof rawId === "string" && rawId.trim().length > 0) {
+        id = rawId.trim();
       }
       if (body && typeof body.description === "string" && body.description.trim().length > 0) {
         description = body.description.trim();
@@ -57,6 +62,7 @@ export async function POST(req: NextRequest) {
 
     const project = await prisma.project.create({
       data: {
+        ...(id ? { id } : {}),
         name,
         ownerId: userId,
         description,

@@ -1,5 +1,4 @@
-"use client";
-
+import Link from "next/link";
 import { Plus, X, Pencil, Trash2, Folder, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -78,8 +77,9 @@ export function ProjectSidebar({
                 <ScrollArea className="flex-1 h-full w-full">
                   <div className="space-y-1.5 py-1 px-1 pr-2">
                     {ownedProjects.map((project) => (
-                      <div
+                      <Link
                         key={project.id}
+                        href={`/editor/${project.id}`}
                         className="group flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-subtle border border-transparent hover:border-default transition-colors text-left w-full cursor-pointer"
                       >
                         <div className="flex-1 min-w-0 pr-2">
@@ -97,6 +97,7 @@ export function ProjectSidebar({
                             variant="ghost"
                             size="icon"
                             onClick={(e) => {
+                              e.preventDefault();
                               e.stopPropagation();
                               onOpenRename(project);
                             }}
@@ -110,6 +111,7 @@ export function ProjectSidebar({
                             variant="ghost"
                             size="icon"
                             onClick={(e) => {
+                              e.preventDefault();
                               e.stopPropagation();
                               onOpenDelete(project);
                             }}
@@ -120,7 +122,7 @@ export function ProjectSidebar({
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>
                         </div>
-                      </div>
+                      </Link>
                     ))}
                   </div>
                 </ScrollArea>
@@ -140,8 +142,9 @@ export function ProjectSidebar({
                 <ScrollArea className="flex-1 h-full w-full">
                   <div className="space-y-1.5 py-1 px-1 pr-2">
                     {sharedProjects.map((project) => (
-                      <div
+                      <Link
                         key={project.id}
+                        href={`/editor/${project.id}`}
                         className="flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-subtle border border-transparent hover:border-default transition-colors text-left w-full cursor-pointer"
                       >
                         <div className="flex-1 min-w-0">
@@ -154,7 +157,7 @@ export function ProjectSidebar({
                           </p>
                         </div>
                         {/* No actions for shared projects */}
-                      </div>
+                      </Link>
                     ))}
                   </div>
                 </ScrollArea>

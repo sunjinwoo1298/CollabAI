@@ -74,9 +74,9 @@ export function CreateProjectDialog({
             />
 
             <div className="pt-1.5 flex items-center gap-1.5 text-xs text-muted">
-              <span>Slug:</span>
+              <span>Room ID:</span>
               <code className="bg-subtle border border-default text-brand px-2 py-0.5 rounded font-mono text-[11px] truncate max-w-[280px]">
-                {slugPreview ? `/${slugPreview}` : "/..."}
+                {slugPreview ? slugPreview : "..."}
               </code>
             </div>
           </div>
