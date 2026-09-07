@@ -14,6 +14,7 @@ interface ProjectSidebarProps {
   onOpenCreate: () => void;
   onOpenRename: (project: Project) => void;
   onOpenDelete: (project: Project) => void;
+  currentRoomId?: string;
 }
 
 export function ProjectSidebar({
@@ -24,6 +25,7 @@ export function ProjectSidebar({
   onOpenCreate,
   onOpenRename,
   onOpenDelete,
+  currentRoomId,
 }: ProjectSidebarProps) {
   return (
     <>
@@ -76,54 +78,72 @@ export function ProjectSidebar({
               ) : (
                 <ScrollArea className="flex-1 h-full w-full">
                   <div className="space-y-1.5 py-1 px-1 pr-2">
-                    {ownedProjects.map((project) => (
-                      <Link
-                        key={project.id}
-                        href={`/editor/${project.id}`}
-                        className="group flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-subtle border border-transparent hover:border-default transition-colors text-left w-full cursor-pointer"
-                      >
-                        <div className="flex-1 min-w-0 pr-2">
-                          <p className="text-sm font-medium text-primary truncate">
-                            {project.name}
-                          </p>
-                          <p className="text-[11px] text-muted truncate">
-                            {project.updatedAt}
-                          </p>
-                        </div>
+                    {ownedProjects.map((project) => {
+                      const isActive = project.id === currentRoomId;
+                      return (
+                        <Link
+                          key={project.id}
+                          href={`/editor/${project.id}`}
+                          className={cn(
+                            "group flex items-center justify-between px-3 py-2.5 rounded-lg border transition-colors text-left w-full cursor-pointer",
+                            isActive
+                              ? "bg-subtle/90 border-brand/40 text-primary shadow-xs font-medium"
+                              : "hover:bg-subtle border-transparent hover:border-default text-primary"
+                          )}
+                        >
+                          <div className="flex-1 min-w-0 pr-2">
+                            <div className="flex items-center gap-1.5">
+                              {isActive && (
+                                <span className="h-1.5 w-1.5 rounded-full bg-brand shrink-0" />
+                              )}
+                              <p className="text-sm font-medium text-primary truncate">
+                                {project.name}
+                              </p>
+                            </div>
+                            <p className="text-[11px] text-muted truncate">
+                              {project.updatedAt}
+                            </p>
+                          </div>
 
-                        {/* Project actions (Owned only, visible only on hover/focus) */}
-                        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity shrink-0">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              onOpenRename(project);
-                            }}
-                            className="h-7 w-7 text-muted hover:text-primary hover:bg-elevated rounded-md"
-                            title="Rename project"
-                            aria-label={`Rename ${project.name}`}
+                          {/* Project actions (Owned only, visible on hover/focus or if active) */}
+                          <div
+                            className={cn(
+                              "flex items-center gap-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity shrink-0",
+                              isActive && "opacity-80"
+                            )}
                           >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              onOpenDelete(project);
-                            }}
-                            className="h-7 w-7 text-muted hover:text-destructive hover:bg-elevated rounded-md"
-                            title="Delete project"
-                            aria-label={`Delete ${project.name}`}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </Link>
-                    ))}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                onOpenRename(project);
+                              }}
+                              className="h-7 w-7 text-muted hover:text-primary hover:bg-elevated rounded-md"
+                              title="Rename project"
+                              aria-label={`Rename ${project.name}`}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                onOpenDelete(project);
+                              }}
+                              className="h-7 w-7 text-muted hover:text-destructive hover:bg-elevated rounded-md"
+                              title="Delete project"
+                              aria-label={`Delete ${project.name}`}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </Link>
+                      );
+                    })}
                   </div>
                 </ScrollArea>
               )}
@@ -141,24 +161,36 @@ export function ProjectSidebar({
               ) : (
                 <ScrollArea className="flex-1 h-full w-full">
                   <div className="space-y-1.5 py-1 px-1 pr-2">
-                    {sharedProjects.map((project) => (
-                      <Link
-                        key={project.id}
-                        href={`/editor/${project.id}`}
-                        className="flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-subtle border border-transparent hover:border-default transition-colors text-left w-full cursor-pointer"
-                      >
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-primary truncate flex items-center gap-1.5">
-                            <Users className="h-3.5 w-3.5 text-ai shrink-0" />
-                            <span className="truncate">{project.name}</span>
-                          </p>
-                          <p className="text-[11px] text-muted truncate">
-                            {project.updatedAt}
-                          </p>
-                        </div>
-                        {/* No actions for shared projects */}
-                      </Link>
-                    ))}
+                    {sharedProjects.map((project) => {
+                      const isActive = project.id === currentRoomId;
+                      return (
+                        <Link
+                          key={project.id}
+                          href={`/editor/${project.id}`}
+                          className={cn(
+                            "flex items-center justify-between px-3 py-2.5 rounded-lg border transition-colors text-left w-full cursor-pointer",
+                            isActive
+                              ? "bg-subtle/90 border-brand/40 text-primary shadow-xs font-medium"
+                              : "hover:bg-subtle border-transparent hover:border-default text-primary"
+                          )}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-primary truncate flex items-center gap-1.5">
+                              {isActive ? (
+                                <span className="h-1.5 w-1.5 rounded-full bg-brand shrink-0" />
+                              ) : (
+                                <Users className="h-3.5 w-3.5 text-ai shrink-0" />
+                              )}
+                              <span className="truncate">{project.name}</span>
+                            </p>
+                            <p className="text-[11px] text-muted truncate">
+                              {project.updatedAt}
+                            </p>
+                          </div>
+                          {/* No actions for shared projects */}
+                        </Link>
+                      );
+                    })}
                   </div>
                 </ScrollArea>
               )}
@@ -179,3 +211,5 @@ export function ProjectSidebar({
     </>
   );
 }
+
+export default ProjectSidebar;

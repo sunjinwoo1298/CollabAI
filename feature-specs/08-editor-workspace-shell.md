@@ -39,7 +39,7 @@ The canvas area should fill the remaining space.
 
 ## Scope
 
-Do not add real canvas logic, Liveblocks, AI chat, or sharing behavior yet.
+Do not add real canvas logic, AI chat, or sharing behavior yet.
 
 ## Check When Done
 
