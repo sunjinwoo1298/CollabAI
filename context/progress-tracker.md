@@ -4,14 +4,15 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Current Phase
 
-- Phase 2: Prisma & Database Setup
+- Phase 3: Project APIs & Editor Wiring
 
 ## Current Goal
 
-- Implement Prisma data layer & project models (05-prisma.md)
+- Wire Editor Home with real project data and mutations (07-wire-editor-home.md)
 
 ## Completed
 
+- 06-project-apis.md: Built backend project REST API routes in App Router: `GET /api/projects` (list user's owned projects), `POST /api/projects` (create with default name fallback and cuid ID strategy), `PATCH /api/projects/[projectId]` (rename project with 401 unauthenticated and 403 non-owner checks), and `DELETE /api/projects/[projectId]` (delete project with 401 unauthenticated and 403 non-owner checks).
 - 05-prisma.md: Added Prisma project models (`Project`, `ProjectCollaborator`, `ProjectStatus` enum) in `prisma/models/project.prisma`, implemented cached singleton in `lib/prisma.ts` with connection branching (`DATABASE_URL` for `prisma+postgres://` via Accelerate vs `@prisma/adapter-pg`), generated Prisma 7 client to `app/generated/prisma`, and applied the initial migration `20260907134825_init` to the database.
 - 04-project-dialogs.md: Implemented minimal centered Editor Home screen, dedicated `useProjectDialogs` hook, Create Project dialog with live slug preview, Rename Project dialog with prefilled auto-focusing input and Enter-to-submit, Delete Project dialog with destructive confirmation, and sidebar project list with actions for owned projects and mobile backdrop scrim.
 - 03-auth.md: Authentication setup with Clerk.
@@ -24,7 +25,7 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Next Up
 
-- 06-project-apis.md: Project API routes (list, create, rename, delete)
+- 07-wire-editor-home.md: Wire editor home sidebar and dialogs to the real project API
 
 ## Open Questions
 
@@ -38,7 +39,8 @@ Update this file whenever the current phase, active feature, or implementation s
 - Sidebar action controls (rename/delete) are exclusively rendered for owned projects and hidden for shared projects.
 - Database layer uses Prisma 7 multi-file schema configuration (`schema: "prisma/"` in `prisma7.config.ts`), generating to `app/generated/prisma`.
 - `lib/prisma.ts` provides a runtime singleton that branches dynamically: using `accelerateUrl` for `prisma+postgres://` URLs and `@prisma/adapter-pg` pool adapter for standard PostgreSQL connection strings, cached on `globalThis` in development.
+- Backend project routes (`/api/projects` and `/api/projects/[projectId]`) enforce Clerk user authentication (`401` on unauthenticated) and strict owner authorization (`403` on non-owner rename or delete attempts).
 
 ## Session Notes
 
-- Completed 05-prisma.md. Created `prisma/models/project.prisma`, created `lib/prisma.ts` singleton with dynamic adapter/accelerate branching, applied migration `20260907134825_init`, generated client, and verified `npm run build` passes with zero errors.
+- Completed 06-project-apis.md. Implemented Next.js route handlers `app/api/projects/route.ts` and `app/api/projects/[projectId]/route.ts` with Clerk auth validation, owner-only mutation guards (403), schema cuid ID generation, and "Untitled Project" name fallbacks. Verified `npm run build` passes with zero errors.
