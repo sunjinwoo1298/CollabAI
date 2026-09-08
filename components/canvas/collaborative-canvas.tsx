@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useRef, useState, useMemo } from "react";
+import React, { useCallback, useRef, useState, useMemo, useEffect } from "react";
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -143,7 +143,11 @@ function CollaborativeCanvasInner({ projectId }: CollaborativeCanvasProps) {
     updatePresence,
   });
 
-  // 3. Pointer move listener for broadcasting ephemeral cursor
+  // 3. Throttled Pointer move listener for broadcasting ephemeral cursor (~30fps)
+  const lastBroadcastRef = useRef<number>(0);
+  const pendingCursorRef = useRef<{ x: number; y: number } | null>(null);
+  const rafIdRef = useRef<number | null>(null);
+
   const handlePointerMove = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
       if (!awareness) return;
@@ -153,18 +157,49 @@ function CollaborativeCanvasInner({ projectId }: CollaborativeCanvasProps) {
         y: e.clientY,
       });
 
-      updatePresence({
-        cursor: {
-          x: Math.round(flowPos.x),
-          y: Math.round(flowPos.y),
-        },
-      });
+      const nextCursor = {
+        x: Math.round(flowPos.x),
+        y: Math.round(flowPos.y),
+      };
+
+      pendingCursorRef.current = nextCursor;
+
+      const now = performance.now();
+      // Throttle awareness broadcast to ~30ms to avoid websocket flooding
+      if (now - lastBroadcastRef.current >= 30) {
+        lastBroadcastRef.current = now;
+        updatePresence({ cursor: nextCursor });
+      } else if (!rafIdRef.current) {
+        rafIdRef.current = requestAnimationFrame(() => {
+          rafIdRef.current = null;
+          lastBroadcastRef.current = performance.now();
+          if (pendingCursorRef.current) {
+            updatePresence({ cursor: pendingCursorRef.current });
+          }
+        });
+      }
     },
     [awareness, screenToFlowPosition, updatePresence]
   );
 
   const handlePointerLeave = useCallback(() => {
+    if (rafIdRef.current) {
+      cancelAnimationFrame(rafIdRef.current);
+      rafIdRef.current = null;
+    }
+    pendingCursorRef.current = null;
     updatePresence({ cursor: null });
+  }, [updatePresence]);
+
+  // Clean up pointer broadcast on unmount
+  useEffect(() => {
+    return () => {
+      if (rafIdRef.current) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+      updatePresence({ cursor: null });
+    };
   }, [updatePresence]);
 
   // 4. Node Creation Helper
