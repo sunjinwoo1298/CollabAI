@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Sparkles, X, Layers, Bot } from "lucide-react";
+import { Sparkles, X, Bot } from "lucide-react";
 import { EditorNavbar } from "@/components/editor/editor-navbar";
 import { ProjectSidebar } from "@/components/editor/project-sidebar";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { CreateProjectDialog } from "@/components/editor/dialogs/create-project-
 import { RenameProjectDialog } from "@/components/editor/dialogs/rename-project-dialog";
 import { DeleteProjectDialog } from "@/components/editor/dialogs/delete-project-dialog";
 import { ShareDialog } from "@/components/editor/dialogs/share-dialog";
+import { CollaborativeCanvas } from "@/components/canvas/collaborative-canvas";
 import { Project } from "@/types/project";
 
 interface WorkspaceShellProps {
@@ -69,8 +70,16 @@ export function WorkspaceShell({
       />
 
       {/* Main Workspace Area */}
-      <div className="flex-1 relative flex overflow-hidden">
-        {/* Left Project Sidebar */}
+      <div className="flex-1 relative w-full h-full overflow-hidden">
+        {/* Full-bleed Canvas Area (Spans edge-to-edge behind sidebars) */}
+        <main className="absolute inset-0 w-full h-full bg-base overflow-hidden">
+          <CollaborativeCanvas
+            projectId={project.id}
+            isOwner={project.isOwner}
+          />
+        </main>
+
+        {/* Floating Left Project Sidebar */}
         <ProjectSidebar
           isOpen={isSidebarOpen}
           onClose={() => setIsSidebarOpen(false)}
@@ -82,44 +91,9 @@ export function WorkspaceShell({
           onOpenDelete={openDelete}
         />
 
-        {/* Center Canvas Area (Fills remaining space) */}
-        <main className="flex-1 h-full relative flex items-center justify-center bg-base overflow-hidden select-none">
-          {/* Subtle Canvas Dot Grid Background */}
-          <div
-            className="absolute inset-0 pointer-events-none opacity-20"
-            style={{
-              backgroundImage:
-                "radial-gradient(var(--border-default) 1px, transparent 1px)",
-              backgroundSize: "24px 24px",
-            }}
-          />
-
-          {/* Central Canvas Placeholder Message */}
-          <div className="relative z-10 max-w-sm w-full mx-4 p-8 rounded-2xl bg-surface/80 border border-default shadow-2xl backdrop-blur-sm text-center space-y-4">
-            <div className="h-12 w-12 rounded-xl bg-subtle border border-default flex items-center justify-center mx-auto text-muted">
-              <Layers className="h-6 w-6 text-brand" />
-            </div>
-
-            <div className="space-y-1.5">
-              <h2 className="text-lg font-semibold text-primary tracking-tight">
-                {project.name}
-              </h2>
-              <p className="text-xs text-muted">
-                Visual architecture canvas will be loaded here.
-              </p>
-            </div>
-
-            <div className="pt-1">
-              <span className="inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-mono bg-subtle border border-default text-muted">
-                Room: {project.id}
-              </span>
-            </div>
-          </div>
-        </main>
-
-        {/* Right AI Sidebar Placeholder */}
+        {/* Floating Right AI Sidebar Placeholder */}
         {isAiSidebarOpen && (
-          <aside className="w-80 lg:w-96 border-l border-default bg-elevated shrink-0 flex flex-col h-full z-20 shadow-2xl animate-in slide-in-from-right duration-200">
+          <aside className="absolute inset-y-0 right-0 w-80 lg:w-96 border-l border-default bg-surface/95 backdrop-blur-xl flex flex-col h-full z-40 shadow-2xl animate-in slide-in-from-right duration-200">
             <div className="h-14 border-b border-default px-4 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-ai" />

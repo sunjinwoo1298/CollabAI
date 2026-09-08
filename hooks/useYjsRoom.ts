@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import * as Y from "yjs";
 import { WebsocketProvider } from "y-websocket";
 import { Awareness } from "y-protocols/awareness";
-import { AwarenessState, UserPresence, WsAuthResponse } from "@/types/collaboration";
+import { UserPresence, WsAuthResponse } from "@/types/collaboration";
 
 export type ConnectionState =
   | "idle"
@@ -27,7 +27,7 @@ export interface UseYjsRoomResult {
 }
 
 export function useYjsRoom(projectId: string | null | undefined): UseYjsRoomResult {
-  // Create / maintain Y.Doc per projectId
+  // Create / maintain single Y.Doc per projectId
   const doc = useMemo(() => new Y.Doc(), [projectId]);
   const nodesMap = useMemo(() => doc.getMap("nodes"), [doc]);
   const edgesMap = useMemo(() => doc.getMap("edges"), [doc]);
@@ -39,18 +39,28 @@ export function useYjsRoom(projectId: string | null | undefined): UseYjsRoomResu
 
   const providerRef = useRef<WebsocketProvider | null>(null);
   const isMountedRef = useRef(true);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isConnectingRef = useRef(false);
   const isUnauthorizedRef = useRef(false);
+
+  // Helper to cleanly destroy an existing provider without triggering recursive reconnect loops
+  const destroyCurrentProvider = useCallback(() => {
+    if (!providerRef.current) return;
+    const oldProvider = providerRef.current;
+    providerRef.current = null;
+
+    try {
+      // Disconnect and destroy
+      oldProvider.destroy();
+    } catch (e) {
+      console.warn("[useYjsRoom] Error destroying provider:", e);
+    }
+  }, []);
 
   // Authenticate and establish connection
   const connectRoom = useCallback(async () => {
-    if (!projectId || isUnauthorizedRef.current) return;
+    if (!projectId || isUnauthorizedRef.current || isConnectingRef.current) return;
 
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
-    }
-
+    isConnectingRef.current = true;
     if (isMountedRef.current) {
       setConnectionState("connecting");
       setError(null);
@@ -64,13 +74,18 @@ export function useYjsRoom(projectId: string | null | undefined): UseYjsRoomResu
         body: JSON.stringify({ projectId }),
       });
 
-      if (!isMountedRef.current) return;
+      if (!isMountedRef.current) {
+        isConnectingRef.current = false;
+        return;
+      }
 
       // Handle authorization failure
       if (res.status === 401 || res.status === 403) {
         isUnauthorizedRef.current = true;
         setConnectionState("unauthorized");
         setError("Unauthorized access to this project room");
+        destroyCurrentProvider();
+        isConnectingRef.current = false;
         return;
       }
 
@@ -85,13 +100,10 @@ export function useYjsRoom(projectId: string | null | undefined): UseYjsRoomResu
         throw new Error("No token returned by authorization endpoint");
       }
 
-      // 2. Destroy previous provider instance if any
-      if (providerRef.current) {
-        providerRef.current.destroy();
-        providerRef.current = null;
-      }
+      // Destroy previous provider if any before instantiating new one
+      destroyCurrentProvider();
 
-      // 3. Create fresh WebsocketProvider with newly minted JWT token (Invariant 1: projectId === roomId)
+      // 2. Create fresh WebsocketProvider with newly minted JWT token (Invariant 1: projectId === roomId)
       const wsProvider = new WebsocketProvider(wsUrl, projectId, doc, {
         params: { token },
         connect: true,
@@ -103,13 +115,13 @@ export function useYjsRoom(projectId: string | null | undefined): UseYjsRoomResu
         setAwareness(wsProvider.awareness);
       }
 
-      // 4. Initial presence configuration (Invariant 4: Ephemeral presence)
+      // 3. Initial presence configuration (Invariant 4: Ephemeral presence)
       wsProvider.awareness.setLocalStateField("presence", {
         cursor: null,
         isThinking: false,
       });
 
-      // 5. Provider event listeners
+      // 4. Provider event listeners
       wsProvider.on("status", (event: { status: "connecting" | "connected" | "disconnected" }) => {
         if (!isMountedRef.current) return;
 
@@ -119,16 +131,18 @@ export function useYjsRoom(projectId: string | null | undefined): UseYjsRoomResu
         } else if (event.status === "connecting") {
           setConnectionState("connecting");
         } else if (event.status === "disconnected") {
-          // If not permanently unauthorized, mark disconnected and trigger re-auth loop
           if (!isUnauthorizedRef.current) {
             setConnectionState("disconnected");
           }
         }
       });
 
-      // 6. Handle socket connection errors and re-authorization (Invariant 5)
+      // 5. Handle socket connection close
       wsProvider.on("connection-close", (event: CloseEvent | null) => {
         if (!isMountedRef.current) return;
+
+        // CRITICAL FIX: If event is null, this is a local intentional disconnect/destroy -> DO NOT RECONNECT!
+        if (event === null) return;
 
         // Code 4403 or 403 denotes forbidden
         if (event?.code === 4403 || event?.code === 403) {
@@ -139,15 +153,9 @@ export function useYjsRoom(projectId: string | null | undefined): UseYjsRoomResu
           return;
         }
 
-        // Standard reconnect requires re-authorization via POST /api/ws-auth (Invariant 5)
+        // Standard close - mark disconnected (y-websocket handles automatic reconnect attempts with exponential backoff)
         if (!isUnauthorizedRef.current && isMountedRef.current) {
           setConnectionState("disconnected");
-          if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
-          reconnectTimeoutRef.current = setTimeout(() => {
-            if (isMountedRef.current && !isUnauthorizedRef.current) {
-              connectRoom();
-            }
-          }, 3000);
         }
       });
     } catch (err: any) {
@@ -155,22 +163,15 @@ export function useYjsRoom(projectId: string | null | undefined): UseYjsRoomResu
       console.error("[useYjsRoom] Connection error:", err);
       setError(err.message || "Failed to establish real-time collaboration");
       setConnectionState("error");
-
-      // Attempt reconnection after backoff if not unauthorized
-      if (!isUnauthorizedRef.current) {
-        if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
-        reconnectTimeoutRef.current = setTimeout(() => {
-          if (isMountedRef.current && !isUnauthorizedRef.current) {
-            connectRoom();
-          }
-        }, 5000);
-      }
+    } finally {
+      isConnectingRef.current = false;
     }
-  }, [projectId, doc]);
+  }, [projectId, doc, destroyCurrentProvider]);
 
   // Reconnect trigger
   const reconnect = useCallback(() => {
     isUnauthorizedRef.current = false;
+    isConnectingRef.current = false;
     connectRoom();
   }, [connectRoom]);
 
@@ -188,6 +189,7 @@ export function useYjsRoom(projectId: string | null | undefined): UseYjsRoomResu
   useEffect(() => {
     isMountedRef.current = true;
     isUnauthorizedRef.current = false;
+    isConnectingRef.current = false;
 
     if (projectId) {
       connectRoom();
@@ -195,17 +197,10 @@ export function useYjsRoom(projectId: string | null | undefined): UseYjsRoomResu
 
     return () => {
       isMountedRef.current = false;
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-        reconnectTimeoutRef.current = null;
-      }
-      if (providerRef.current) {
-        providerRef.current.destroy();
-        providerRef.current = null;
-      }
+      destroyCurrentProvider();
       doc.destroy();
     };
-  }, [projectId, doc, connectRoom]);
+  }, [projectId, doc, connectRoom, destroyCurrentProvider]);
 
   return {
     doc,

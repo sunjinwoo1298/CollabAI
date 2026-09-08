@@ -8,6 +8,7 @@
     "start": "next start",
     "ws:dev": "tsx ws-server/src/server.ts",
     "ws:start": "tsx ws-server/src/server.ts",
+    "test:canvas": "tsx test/canvas-sync.test.ts",
     "lint": "eslint"
   },
   "dependencies": {
@@ -15,6 +16,7 @@
     "@clerk/themes": "^2.4.57",
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
+    "@xyflow/react": "^12.11.6",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "dotenv": "^17.4.2",

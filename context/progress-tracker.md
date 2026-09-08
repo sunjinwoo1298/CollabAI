@@ -8,41 +8,21 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Current Goal
 
-- Replace canvas placeholder with collaborative React Flow canvas (11-base-canvas.md)
+- Implement architecture starter templates (12-templates.md)
 
 ## Completed
 
+- 11-base-canvas.md: Built base collaborative React Flow canvas using Yjs CRDT single source of truth (`nodesMap`, `edgesMap`).
+  - Installed `@xyflow/react` and configured custom dark-glassmorphism theme styles in `app/globals.css`.
+  - Created `types/canvas.ts` defining serializable node schemas (`SystemNodeData`, `CanvasNode`, `CanvasEdge`, `RemoteCollaborator`).
+  - Built `components/canvas/nodes/system-node.tsx` with 8 system component archetypes (Service, Database, Cache, Queue, Gateway, Storage, Client, Custom), multi-port connection handles, and status indicators.
+  - Built `components/canvas/cursors/collaborator-cursor.tsx` with `ViewportPortal` for pan/zoom invariant remote cursor and presence rendering.
+  - Built `hooks/useCanvasSync.ts` implementing loop-free bidirectional Yjs <-> React Flow synchronization, safe initial hydration, optimistic local interactions, and batch transactions (`doc.transact`).
+  - Built `components/canvas/collaborative-canvas.tsx` featuring interactive top toolbar, quick component presets, click and drag-and-drop node placement (`onDragStart`, `onDragOver`, `onDrop`), fit view, connection indicator (`Live` / `Connecting...` / `Offline`), collaborator presence count, natural full-bleed dark dot grid background, controls, and minimap.
+  - Resolved WebSocket reconnection loop in `hooks/useYjsRoom.ts` by ignoring null close events on local provider teardown, removing listener leaks, and adding re-entrancy guards.
+  - Updated workspace layout in `components/editor/workspace-shell.tsx` and `components/editor/project-sidebar.tsx` so both sidebars float seamlessly over the infinite canvas without resizing the canvas or card-like margins.
+  - Integrated canvas into `components/editor/workspace-shell.tsx` and created test suite `test/canvas-sync.test.ts`.
 - 10-Yjs-setup.md: Established the real-time CRDT collaboration infrastructure with Yjs, y-websocket, Room JWTs, and Redis Pub/Sub WebSocket infrastructure.
-  - Created `types/collaboration.ts` for ephemeral presence (`UserPresence`, `UserMeta`, `AwarenessState`) and auth payloads (`WsAuthTokenPayload`, `WsAuthResponse`).
-  - Created `lib/collaboration-color.ts` implementing a 10-color deterministic hash palette for consistent cursor colors with zero database queries.
-  - Created `lib/room-jwt.ts` with HS256 short-lived Room JWT token signing and verification (`signRoomToken`, `verifyRoomToken`).
-  - Built `app/api/ws-auth/route.ts` enforcing Clerk authentication, Prisma project/collaborator access control, 1:1 room ID mapping, and short-lived Room JWT issuance.
-  - Implemented standalone WebSocket server (`ws-server/`) with HTTP health check (`/health`), upgrade JWT verification without PostgreSQL querying, binary `y-websocket` CRDT synchronization, ephemeral awareness broadcasting, Redis Pub/Sub multi-instance fan-out, and active-room delta cache.
-  - Built client lifecycle hook `hooks/useYjsRoom.ts` with Y.Doc map bindings (`nodes`, `edges`), awareness presence helpers, automatic re-authorization on disconnect, and 403 unauthorized loop termination.
-  - Preserved all 5 core collaboration invariants and verified zero `@liveblocks/*` SDK references in the codebase.
-- 09-share-dialog.md: Implemented project sharing APIs (`GET /api/projects/[projectId]/collaborators`, `POST /api/projects/[projectId]/collaborators`, `DELETE /api/projects/[projectId]/collaborators/[collaboratorId]`) with strict server-side owner authorization, Clerk Backend API user enrichment (display names and avatar images), and self-invite/duplicate invitation guards. Created `components/editor/dialogs/share-dialog.tsx` featuring owner invite controls, collaborator list with Clerk avatars and badges, read-only permissions for collaborators, and one-click project link copying with live `Copied!` feedback. Wired Share dialog into `components/editor/workspace-shell.tsx`.
-- 08-editor-workspace-shell.md: Built the `/editor/[roomId]` workspace shell as a server component with server-side access verification via `lib/project-access.ts` (`getCurrentUserIdentity`, `getProjectAccess`). Unauthenticated requests redirect to `/sign-in`, while non-existent or unauthorized projects render `components/editor/access-denied.tsx`. Implemented full-viewport layout `components/editor/workspace-shell.tsx` with dynamic project name in top navbar, share action placeholder, AI chat toggle, left `ProjectSidebar` integration with active room highlighting (`currentRoomId`), center dark-themed canvas placeholder, and collapsible right AI sidebar placeholder.
-- 07-wire-editor-home.md: Wired Editor Home server component, project sidebar, and project management dialogs to the real backend Project API. Implemented `lib/projects.ts` data access helper for server-side fetching of owned and shared projects (with zero initial client fetching), centralized dialog/mutation state in `hooks/useProjectActions.ts`, ensured 1:1 Yjs room ID alignment (`slug-suffix`) on creation with live preview, wired sidebar project navigation and action controls, and confirmed zero `@liveblocks/*` SDK references.
-- 06-project-apis.md: Built backend project REST API routes in App Router: `GET /api/projects` (list user's owned projects), `POST /api/projects` (create with default name fallback, custom roomId support, and cuid ID strategy), `PATCH /api/projects/[projectId]` (rename project with 401 unauthenticated and 403 non-owner checks), and `DELETE /api/projects/[projectId]` (delete project with 401 unauthenticated and 403 non-owner checks).
-- 05-prisma.md: Added Prisma project models (`Project`, `ProjectCollaborator`, `ProjectStatus` enum) in `prisma/models/project.prisma`, implemented cached singleton in `lib/prisma.ts` with connection branching (`DATABASE_URL` for `prisma+postgres://` via Accelerate vs `@prisma/adapter-pg`), generated Prisma 7 client to `app/generated/prisma`, and applied the initial migration `20260907134825_init` to the database.
-- 04-project-dialogs.md: Implemented minimal centered Editor Home screen, dedicated `useProjectDialogs` hook, Create Project dialog with live slug preview, Rename Project dialog with prefilled auto-focusing input and Enter-to-submit, Delete Project dialog with destructive confirmation, and sidebar project list with actions for owned projects and mobile backdrop scrim.
-- 03-auth.md: Authentication setup with Clerk.
-- 02-editor-chrome.md: Base editor navbar and project sidebar shell.
-- 01-design-system.md: Installed and configured shadcn/ui with Radix UI and Nova preset, added 7 UI primitives (Button, Card, Dialog, Input, Tabs, Textarea, ScrollArea), installed lucide-react, created lib/utils.ts with cn() helper, configured globals.css with complete dark-only design tokens and Tailwind v4 utilities.
-
-## In Progress
-
-- None
-
-## Next Up
-
-- 11-base-canvas.md: Base collaborative React Flow canvas with Yjs-synced nodes and edges
-
-## Open Questions
-
-- None.
-
-## Architecture Decisions
 
 - Configured dark-only design tokens via CSS variables and Tailwind v4 @theme inline mappings to align shadcn primitives and custom tokens.
 - Preserved pristine generated files in components/ui/*.
