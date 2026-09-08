@@ -33,6 +33,7 @@ export function WorkspaceShell({
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isAiSidebarOpen, setIsAiSidebarOpen] = useState(false);
   const [isShareOpen, setIsShareOpen] = useState(false);
+  const [isTemplatesOpen, setIsTemplatesOpen] = useState(false);
 
   const {
     isCreateOpen,
@@ -66,6 +67,7 @@ export function WorkspaceShell({
         isAiSidebarOpen={isAiSidebarOpen}
         onToggleAiSidebar={() => setIsAiSidebarOpen((prev) => !prev)}
         onOpenShare={() => setIsShareOpen(true)}
+        onOpenTemplates={() => setIsTemplatesOpen(true)}
         showWorkspaceActions={true}
       />
 
@@ -76,6 +78,9 @@ export function WorkspaceShell({
           <CollaborativeCanvas
             projectId={project.id}
             isOwner={project.isOwner}
+            isTemplatesOpen={isTemplatesOpen}
+            onOpenTemplates={() => setIsTemplatesOpen(true)}
+            onCloseTemplates={() => setIsTemplatesOpen(false)}
           />
         </main>
 

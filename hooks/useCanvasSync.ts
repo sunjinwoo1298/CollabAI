@@ -12,6 +12,7 @@ import {
 import { Awareness } from "y-protocols/awareness";
 import { CanvasNode, CanvasEdge, RemoteCollaborator, SystemNodeData } from "@/types/canvas";
 import { UserPresence } from "@/types/collaboration";
+import { CanvasTemplate } from "@/components/editor/starter-templates";
 
 interface UseCanvasSyncOptions {
   doc: Y.Doc;
@@ -32,6 +33,7 @@ export interface UseCanvasSyncResult {
   deleteNode: (nodeId: string) => void;
   updateNodeData: (nodeId: string, data: Partial<SystemNodeData>) => void;
   clearCanvas: () => void;
+  loadTemplate: (template: CanvasTemplate) => void;
   setNodes: React.Dispatch<React.SetStateAction<CanvasNode[]>>;
   setEdges: React.Dispatch<React.SetStateAction<CanvasEdge[]>>;
 }
@@ -283,6 +285,34 @@ export function useCanvasSync({
     }
   }, [doc, nodesMap, edgesMap]);
 
+  const loadTemplate = useCallback(
+    (template: CanvasTemplate) => {
+      isLocalTransactionRef.current = true;
+      try {
+        doc.transact(() => {
+          // 1. Clear all existing nodes and edges
+          for (const key of Array.from(nodesMap.keys())) {
+            nodesMap.delete(key);
+          }
+          for (const key of Array.from(edgesMap.keys())) {
+            edgesMap.delete(key);
+          }
+
+          // 2. Add all template nodes and edges in the same transaction
+          for (const node of template.nodes) {
+            nodesMap.set(node.id, node);
+          }
+          for (const edge of template.edges) {
+            edgesMap.set(edge.id, edge);
+          }
+        }, "local-load-template");
+      } finally {
+        isLocalTransactionRef.current = false;
+      }
+    },
+    [doc, nodesMap, edgesMap]
+  );
+
   return {
     nodes,
     edges,
@@ -294,6 +324,7 @@ export function useCanvasSync({
     deleteNode,
     updateNodeData,
     clearCanvas,
+    loadTemplate,
     setNodes,
     setEdges,
   };

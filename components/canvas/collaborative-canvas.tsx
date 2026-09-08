@@ -29,6 +29,7 @@ import {
   RefreshCw,
   Sparkles,
   GripVertical,
+  LayoutTemplate,
 } from "lucide-react";
 import { useYjsRoom } from "@/hooks/useYjsRoom";
 import { useCanvasSync } from "@/hooks/useCanvasSync";
@@ -37,10 +38,15 @@ import { CollaboratorCursors } from "@/components/canvas/cursors/collaborator-cu
 import { CanvasNode, CanvasNodeType } from "@/types/canvas";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { StarterTemplatesModal } from "@/components/editor/starter-templates-modal";
+import { CanvasTemplate } from "@/components/editor/starter-templates";
 
 interface CollaborativeCanvasProps {
   projectId: string;
   isOwner?: boolean;
+  isTemplatesOpen?: boolean;
+  onOpenTemplates?: () => void;
+  onCloseTemplates?: () => void;
 }
 
 const nodeTypes = {
@@ -105,10 +111,33 @@ export const NODE_PRESETS: Array<{
   },
 ];
 
-function CollaborativeCanvasInner({ projectId }: CollaborativeCanvasProps) {
+function CollaborativeCanvasInner({
+  projectId,
+  isTemplatesOpen: controlledIsTemplatesOpen,
+  onOpenTemplates,
+  onCloseTemplates,
+}: CollaborativeCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
   const [isConfirmClearOpen, setIsConfirmClearOpen] = useState(false);
+  const [internalIsTemplatesOpen, setInternalIsTemplatesOpen] = useState(false);
+
+  const isTemplatesModalOpen = controlledIsTemplatesOpen ?? internalIsTemplatesOpen;
+  const handleOpenTemplates = useCallback(() => {
+    if (onOpenTemplates) {
+      onOpenTemplates();
+    } else {
+      setInternalIsTemplatesOpen(true);
+    }
+  }, [onOpenTemplates]);
+
+  const handleCloseTemplates = useCallback(() => {
+    if (onCloseTemplates) {
+      onCloseTemplates();
+    } else {
+      setInternalIsTemplatesOpen(false);
+    }
+  }, [onCloseTemplates]);
 
   const { screenToFlowPosition, fitView } = useReactFlow();
 
@@ -135,6 +164,7 @@ function CollaborativeCanvasInner({ projectId }: CollaborativeCanvasProps) {
     onConnect,
     addNode,
     clearCanvas,
+    loadTemplate,
   } = useCanvasSync({
     doc,
     nodesMap,
@@ -142,6 +172,17 @@ function CollaborativeCanvasInner({ projectId }: CollaborativeCanvasProps) {
     awareness,
     updatePresence,
   });
+
+  // Handle template import: atomically replaces canvas & fits view
+  const handleImportTemplate = useCallback(
+    (template: CanvasTemplate) => {
+      loadTemplate(template);
+      setTimeout(() => {
+        fitView({ duration: 400, padding: 0.2 });
+      }, 50);
+    },
+    [loadTemplate, fitView]
+  );
 
   // 3. Throttled Pointer move listener for broadcasting ephemeral cursor (~30fps)
   const lastBroadcastRef = useRef<number>(0);
@@ -452,12 +493,24 @@ function CollaborativeCanvasInner({ projectId }: CollaborativeCanvasProps) {
             )}
           </div>
 
+          {/* Starter Templates Button */}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleOpenTemplates}
+            className="h-9 px-3 gap-1.5 bg-surface/80 hover:bg-subtle border-default text-primary font-medium rounded-xl shadow-lg backdrop-blur-md cursor-pointer"
+            title="Browse Starter Templates"
+          >
+            <LayoutTemplate className="h-4 w-4 text-brand" />
+            <span className="hidden sm:inline">Templates</span>
+          </Button>
+
           {/* Fit View Button */}
           <Button
             variant="outline"
             size="icon"
             onClick={() => fitView({ duration: 300 })}
-            className="h-9 w-9 bg-surface/80 hover:bg-subtle border-default text-muted hover:text-primary rounded-xl shadow-lg backdrop-blur-md"
+            className="h-9 w-9 bg-surface/80 hover:bg-subtle border-default text-muted hover:text-primary rounded-xl shadow-lg backdrop-blur-md cursor-pointer"
             title="Fit View"
           >
             <Maximize2 className="h-4 w-4" />
@@ -471,7 +524,7 @@ function CollaborativeCanvasInner({ projectId }: CollaborativeCanvasProps) {
                   variant="outline"
                   size="icon"
                   onClick={() => setIsConfirmClearOpen(true)}
-                  className="h-9 w-9 bg-surface/80 hover:bg-error/10 hover:text-error hover:border-error/30 border-default text-muted rounded-xl shadow-lg backdrop-blur-md transition-colors"
+                  className="h-9 w-9 bg-surface/80 hover:bg-error/10 hover:text-error hover:border-error/30 border-default text-muted rounded-xl shadow-lg backdrop-blur-md transition-colors cursor-pointer"
                   title="Clear Canvas"
                 >
                   <Trash2 className="h-4 w-4" />
@@ -582,7 +635,7 @@ function CollaborativeCanvasInner({ projectId }: CollaborativeCanvasProps) {
                   Interactive Collaborative Canvas
                 </h3>
                 <p className="text-xs text-muted leading-relaxed">
-                  Start designing your architecture by adding or dragging system nodes onto the canvas.
+                  Start designing your architecture from scratch or choose a pre-built starter template.
                 </p>
               </div>
 
@@ -620,10 +673,29 @@ function CollaborativeCanvasInner({ projectId }: CollaborativeCanvasProps) {
                   Add Cache
                 </Button>
               </div>
+
+              {/* Starter Templates CTA */}
+              <div className="pt-2 border-t border-default/60">
+                <Button
+                  size="sm"
+                  onClick={handleOpenTemplates}
+                  className="w-full h-8 text-xs font-semibold bg-brand/15 hover:bg-brand/25 text-brand border border-brand/30 gap-1.5 cursor-pointer"
+                >
+                  <LayoutTemplate className="h-3.5 w-3.5" />
+                  <span>Choose Starter Template</span>
+                </Button>
+              </div>
             </div>
           </div>
         )}
       </ReactFlow>
+
+      {/* Starter Templates Modal */}
+      <StarterTemplatesModal
+        isOpen={isTemplatesModalOpen}
+        onClose={handleCloseTemplates}
+        onImport={handleImportTemplate}
+      />
     </div>
   );
 }

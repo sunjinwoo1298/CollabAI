@@ -8,10 +8,17 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Current Goal
 
-- Implement architecture starter templates (12-templates.md)
+- Next feature in roadmap
 
 ## Completed
 
+- 18-starter-templates.md: Implemented starter architecture template library, lightweight SVG preview diagram modal, and single-transaction atomic canvas replacement.
+  - Created `components/editor/starter-templates.ts` with `CanvasTemplate` type, template builder helpers, and 4 architecture diagrams (Microservices, CI/CD Pipeline, Event-Driven Streaming, and AI/RAG Pipeline).
+  - Built `components/editor/starter-templates-modal.tsx` with dialog wrapper, responsive scrollable card grid, and lightweight SVG diagram preview calculator (bounding box calculation, bezier curves, archetype color rendering).
+  - Added `loadTemplate` method to `hooks/useCanvasSync.ts` replacing canvas nodes and edges in a single atomic Yjs transaction (`doc.transact(..., "local-load-template")`).
+  - Integrated starter templates into `components/canvas/collaborative-canvas.tsx` with top toolbar button, empty canvas call-to-action, and automatic `fitView`.
+  - Added "Templates" action button in `components/editor/editor-navbar.tsx` and wired dialog state in `components/editor/workspace-shell.tsx`.
+  - Built comprehensive test suite in `test/starter-templates.test.ts` verifying template validation, single-transaction atomic replacement, and multi-client CRDT sync.
 - 11-base-canvas.md: Built base collaborative React Flow canvas using Yjs CRDT single source of truth (`nodesMap`, `edgesMap`).
   - Installed `@xyflow/react` and configured custom dark-glassmorphism theme styles in `app/globals.css`.
   - Created `types/canvas.ts` defining serializable node schemas (`SystemNodeData`, `CanvasNode`, `CanvasEdge`, `RemoteCollaborator`).

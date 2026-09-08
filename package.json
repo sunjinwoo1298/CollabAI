@@ -9,6 +9,8 @@
     "ws:dev": "tsx ws-server/src/server.ts",
     "ws:start": "tsx ws-server/src/server.ts",
     "test:canvas": "tsx test/canvas-sync.test.ts",
+    "test:templates": "tsx test/starter-templates.test.ts",
+    "test": "tsx test/canvas-sync.test.ts && tsx test/starter-templates.test.ts",
     "lint": "eslint"
   },
   "dependencies": {
