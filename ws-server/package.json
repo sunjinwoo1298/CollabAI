@@ -1,0 +1,19 @@
+{
+  "name": "collaborator-ai-ws-server",
+  "version": "1.0.0",
+  "description": "Collaborator AI WebSocket and Yjs real-time CRDT synchronization server",
+  "main": "src/server.ts",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts"
+  },
+  "keywords": [
+    "yjs",
+    "websocket",
+    "collaboration",
+    "crdt",
+    "redis"
+  ],
+  "author": "",
+  "license": "ISC"
+}
