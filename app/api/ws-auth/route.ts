@@ -104,6 +104,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       token,
       wsUrl,
+      user: userMeta,
     });
   } catch (error) {
     console.error("Error generating WebSocket room token:", error);

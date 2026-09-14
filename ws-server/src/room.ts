@@ -106,6 +106,16 @@ export class CollaborativeRoom {
     this.awareness.on(
       "update",
       ({ added, updated, removed }: { added: number[]; updated: number[]; removed: number[] }, origin: any) => {
+        // Track client IDs associated with this WebSocket connection for clean disconnect cleanup
+        if (origin instanceof WebSocket && this.conns.has(origin)) {
+          const clientSet = this.conns.get(origin);
+          if (clientSet) {
+            added.forEach((id) => clientSet.add(id));
+            updated.forEach((id) => clientSet.add(id));
+            removed.forEach((id) => clientSet.delete(id));
+          }
+        }
+
         const changedClients = added.concat(updated, removed);
         const update = awarenessProtocol.encodeAwarenessUpdate(
           this.awareness,

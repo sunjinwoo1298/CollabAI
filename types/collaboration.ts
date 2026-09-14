@@ -33,4 +33,6 @@ export interface WsAuthTokenPayload {
 export interface WsAuthResponse {
   token: string;
   wsUrl: string;
+  user?: UserMeta;
 }
+

@@ -4,6 +4,8 @@ import { PanelLeftOpen, PanelLeftClose, Share2, Sparkles, LayoutTemplate } from 
 import { Button } from "@/components/ui/button";
 import { UserButton } from "@clerk/nextjs";
 import { cn } from "@/lib/utils";
+import { RemoteCollaborator } from "@/types/canvas";
+import { ParticipantAvatarGroup } from "@/components/canvas/presence/participant-avatar-group";
 
 interface EditorNavbarProps {
   isSidebarOpen: boolean;
@@ -14,6 +16,7 @@ interface EditorNavbarProps {
   onOpenShare?: () => void;
   onOpenTemplates?: () => void;
   showWorkspaceActions?: boolean;
+  collaborators?: RemoteCollaborator[];
 }
 
 export function EditorNavbar({
@@ -25,6 +28,7 @@ export function EditorNavbar({
   onOpenShare,
   onOpenTemplates,
   showWorkspaceActions = false,
+  collaborators = [],
 }: EditorNavbarProps) {
   return (
     <header className="h-14 border-b border-default bg-base flex items-center justify-between px-4 shrink-0 z-50">
@@ -104,6 +108,16 @@ export function EditorNavbar({
               </Button>
             )}
           </>
+        )}
+
+        {/* Active Collaborator Avatars (Only rendered when at least one remote collaborator is connected) */}
+        {collaborators && collaborators.length > 0 && (
+          <ParticipantAvatarGroup collaborators={collaborators} />
+        )}
+
+        {/* Divider between collaborators and Clerk UserButton (Only rendered when at least one collaborator exists) */}
+        {collaborators && collaborators.length > 0 && (
+          <div className="h-5 w-px bg-default mx-1 shrink-0" />
         )}
 
         <div className="shrink-0 flex items-center ml-1">

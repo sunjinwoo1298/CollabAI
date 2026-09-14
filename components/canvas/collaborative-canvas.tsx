@@ -31,11 +31,12 @@ import {
   GripVertical,
   LayoutTemplate,
 } from "lucide-react";
+import { useUser } from "@clerk/nextjs";
 import { useYjsRoom } from "@/hooks/useYjsRoom";
 import { useCanvasSync } from "@/hooks/useCanvasSync";
 import { SystemNode } from "@/components/canvas/nodes/system-node";
 import { CollaboratorCursors } from "@/components/canvas/cursors/collaborator-cursor";
-import { CanvasNode, CanvasNodeType } from "@/types/canvas";
+import { CanvasNode, CanvasNodeType, RemoteCollaborator } from "@/types/canvas";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { StarterTemplatesModal } from "@/components/editor/starter-templates-modal";
@@ -47,6 +48,7 @@ interface CollaborativeCanvasProps {
   isTemplatesOpen?: boolean;
   onOpenTemplates?: () => void;
   onCloseTemplates?: () => void;
+  onCollaboratorsChange?: (collaborators: RemoteCollaborator[]) => void;
 }
 
 const nodeTypes = {
@@ -116,11 +118,14 @@ function CollaborativeCanvasInner({
   isTemplatesOpen: controlledIsTemplatesOpen,
   onOpenTemplates,
   onCloseTemplates,
+  onCollaboratorsChange,
 }: CollaborativeCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
   const [isConfirmClearOpen, setIsConfirmClearOpen] = useState(false);
   const [internalIsTemplatesOpen, setInternalIsTemplatesOpen] = useState(false);
+
+  const { user: clerkUser } = useUser();
 
   const isTemplatesModalOpen = controlledIsTemplatesOpen ?? internalIsTemplatesOpen;
   const handleOpenTemplates = useCallback(() => {
@@ -154,7 +159,7 @@ function CollaborativeCanvasInner({
     updatePresence,
   } = useYjsRoom(projectId);
 
-  // 2. Synchronize Canvas State with Yjs
+  // 2. Synchronize Canvas State with Yjs (excluding current Clerk user)
   const {
     nodes,
     edges,
@@ -170,8 +175,14 @@ function CollaborativeCanvasInner({
     nodesMap,
     edgesMap,
     awareness,
+    currentUserId: clerkUser?.id,
     updatePresence,
   });
+
+  // Notify parent component of collaborator state changes
+  useEffect(() => {
+    onCollaboratorsChange?.(collaborators);
+  }, [collaborators, onCollaboratorsChange]);
 
   // Handle template import: atomically replaces canvas & fits view
   const handleImportTemplate = useCallback(
@@ -184,13 +195,21 @@ function CollaborativeCanvasInner({
     [loadTemplate, fitView]
   );
 
-  // 3. Throttled Pointer move listener for broadcasting ephemeral cursor (~30fps)
+  // 3. Throttled Mouse / Pointer move listener for broadcasting ephemeral cursor (~30fps)
   const lastBroadcastRef = useRef<number>(0);
   const pendingCursorRef = useRef<{ x: number; y: number } | null>(null);
-  const rafIdRef = useRef<number | null>(null);
+  const throttleTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const broadcastCursor = useCallback(
+    (cursor: { x: number; y: number } | null) => {
+      lastBroadcastRef.current = performance.now();
+      updatePresence({ cursor });
+    },
+    [updatePresence]
+  );
 
   const handlePointerMove = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>) => {
+    (e: React.PointerEvent<HTMLDivElement> | React.MouseEvent<HTMLDivElement>) => {
       if (!awareness) return;
 
       const flowPos = screenToFlowPosition({
@@ -204,40 +223,43 @@ function CollaborativeCanvasInner({
       };
 
       pendingCursorRef.current = nextCursor;
-
       const now = performance.now();
-      // Throttle awareness broadcast to ~30ms to avoid websocket flooding
-      if (now - lastBroadcastRef.current >= 30) {
-        lastBroadcastRef.current = now;
-        updatePresence({ cursor: nextCursor });
-      } else if (!rafIdRef.current) {
-        rafIdRef.current = requestAnimationFrame(() => {
-          rafIdRef.current = null;
-          lastBroadcastRef.current = performance.now();
+      const elapsed = now - lastBroadcastRef.current;
+      const THROTTLE_MS = 33; // ~30 fps broadcast rate
+
+      if (elapsed >= THROTTLE_MS) {
+        if (throttleTimerRef.current) {
+          clearTimeout(throttleTimerRef.current);
+          throttleTimerRef.current = null;
+        }
+        broadcastCursor(nextCursor);
+      } else if (!throttleTimerRef.current) {
+        throttleTimerRef.current = setTimeout(() => {
+          throttleTimerRef.current = null;
           if (pendingCursorRef.current) {
-            updatePresence({ cursor: pendingCursorRef.current });
+            broadcastCursor(pendingCursorRef.current);
           }
-        });
+        }, THROTTLE_MS - elapsed);
       }
     },
-    [awareness, screenToFlowPosition, updatePresence]
+    [awareness, screenToFlowPosition, broadcastCursor]
   );
 
   const handlePointerLeave = useCallback(() => {
-    if (rafIdRef.current) {
-      cancelAnimationFrame(rafIdRef.current);
-      rafIdRef.current = null;
+    if (throttleTimerRef.current) {
+      clearTimeout(throttleTimerRef.current);
+      throttleTimerRef.current = null;
     }
     pendingCursorRef.current = null;
-    updatePresence({ cursor: null });
-  }, [updatePresence]);
+    broadcastCursor(null);
+  }, [broadcastCursor]);
 
   // Clean up pointer broadcast on unmount
   useEffect(() => {
     return () => {
-      if (rafIdRef.current) {
-        cancelAnimationFrame(rafIdRef.current);
-        rafIdRef.current = null;
+      if (throttleTimerRef.current) {
+        clearTimeout(throttleTimerRef.current);
+        throttleTimerRef.current = null;
       }
       updatePresence({ cursor: null });
     };
@@ -269,8 +291,8 @@ function CollaborativeCanvasInner({
   const handleAddNode = useCallback(
     (preset: (typeof NODE_PRESETS)[number]) => {
       const bounds = containerRef.current?.getBoundingClientRect();
-      const centerX = bounds ? bounds.left + bounds.width / 2 : window.innerWidth / 2;
-      const centerY = bounds ? bounds.top + bounds.height / 2 : window.innerHeight / 2;
+      const centerX = bounds ? bounds.left + bounds.width / 2 : 400;
+      const centerY = bounds ? bounds.top + bounds.height / 2 : 300;
 
       const flowCenter = screenToFlowPosition({
         x: centerX,
@@ -561,40 +583,12 @@ function CollaborativeCanvasInner({
 
         {/* Top-Right Collaboration & Connection Status Panel */}
         <Panel position="top-right" className="!m-4 !z-30 flex items-center gap-2">
-          {/* Active Collaborators Presence List */}
+          {/* Active Collaborators Presence Count Pill */}
           {collaborators.length > 0 && (
-            <div className="flex items-center gap-1 bg-surface/90 border border-default px-2.5 py-1 rounded-xl shadow-xl backdrop-blur-md">
-              <Users className="h-3.5 w-3.5 text-muted mr-1" />
-              <div className="flex -space-x-2 overflow-hidden">
-                {collaborators.map((collab) => {
-                  const userColor = collab.user?.color || "#10B981";
-                  const userName = collab.user?.name || "Peer";
-                  return (
-                    <div
-                      key={collab.clientId}
-                      className="relative group/avatar"
-                      title={userName}
-                    >
-                      {collab.user.avatar ? (
-                        <img
-                          src={collab.user.avatar}
-                          alt={userName}
-                          className="h-6 w-6 rounded-full border-2 border-surface object-cover shadow-sm"
-                        />
-                      ) : (
-                        <div
-                          className="h-6 w-6 rounded-full border-2 border-surface flex items-center justify-center text-[10px] font-bold text-white shadow-sm"
-                          style={{ backgroundColor: userColor }}
-                        >
-                          {userName.charAt(0).toUpperCase()}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-              <span className="text-xs font-medium text-secondary pl-1">
-                {collaborators.length + 1} online
+            <div className="flex items-center gap-1.5 bg-surface/90 border border-default px-2.5 py-1.5 rounded-xl shadow-xl backdrop-blur-md text-xs font-medium text-secondary">
+              <Users className="h-3.5 w-3.5 text-brand" />
+              <span>
+                {collaborators.length + 1} participant{collaborators.length > 0 ? "s" : ""}
               </span>
             </div>
           )}

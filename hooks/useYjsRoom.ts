@@ -115,7 +115,11 @@ export function useYjsRoom(projectId: string | null | undefined): UseYjsRoomResu
         setAwareness(wsProvider.awareness);
       }
 
-      // 3. Initial presence configuration (Invariant 4: Ephemeral presence)
+      // 3. Initial presence and user metadata configuration (Invariant 4: Ephemeral presence)
+      if (data.user) {
+        wsProvider.awareness.setLocalStateField("user", data.user);
+      }
+
       wsProvider.awareness.setLocalStateField("presence", {
         cursor: null,
         isThinking: false,

@@ -19,6 +19,7 @@ interface UseCanvasSyncOptions {
   nodesMap: Y.Map<any>;
   edgesMap: Y.Map<any>;
   awareness: Awareness | null;
+  currentUserId?: string;
   updatePresence: (presence: Partial<UserPresence>) => void;
 }
 
@@ -43,6 +44,7 @@ export function useCanvasSync({
   nodesMap,
   edgesMap,
   awareness,
+  currentUserId,
   updatePresence,
 }: UseCanvasSyncOptions): UseCanvasSyncResult {
   const [nodes, setNodes] = useState<CanvasNode[]>(() => {
@@ -91,8 +93,12 @@ export function useCanvasSync({
       const peerList: RemoteCollaborator[] = [];
 
       states.forEach((state: any, client: number) => {
-        // Only include remote peers who have user metadata
-        if (client !== awareness.clientID && state?.user) {
+        // Only include remote peers who have user metadata and are not the current user
+        if (
+          client !== awareness.clientID &&
+          state?.user &&
+          (!currentUserId || state.user.userId !== currentUserId)
+        ) {
           peerList.push({
             clientId: client,
             user: state.user,
@@ -111,7 +117,7 @@ export function useCanvasSync({
     return () => {
       awareness.off("change", updateCollaborators);
     };
-  }, [awareness]);
+  }, [awareness, currentUserId]);
 
   // 3. React Flow -> Yjs: Node Changes (position drag, delete, select)
   const onNodesChange = useCallback(

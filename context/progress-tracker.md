@@ -12,6 +12,14 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Completed
 
+- 19-presence-avatars-cursors.md: Implemented real-time participant avatars, initials fallback, deterministic colors, +N overflow indicator, and live collaborative cursors inside the collaborative editor workspace.
+  - Built `components/canvas/presence/participant-avatar-group.tsx` with overlapping participant stack, max 5 visible avatars, `+N` overflow indicator, user avatar support with `getInitials` fallback, deterministic collaboration color background, and `ring-2 ring-base` contrast.
+  - Integrated `ParticipantAvatarGroup` into `components/editor/editor-navbar.tsx` alongside a conditional vertical divider and the Clerk `UserButton`, rendering only for remote peers when connected in an active workspace.
+  - Updated `hooks/useYjsRoom.ts` and `app/api/ws-auth/route.ts` to initialize and synchronize user metadata across Yjs Awareness local states.
+  - Updated `hooks/useCanvasSync.ts` with `currentUserId` filtering to strictly exclude the active local Clerk user from collaborator lists across multi-tab and reconnection flows.
+  - Enhanced `components/canvas/collaborative-canvas.tsx` with Clerk `useUser()` integration, `onCollaboratorsChange` event emitter, throttled flow-coordinate cursor broadcasting (~30fps), cursor reset on mouse leave / unmount, and `<ViewportPortal>` remote cursor overlay.
+  - Updated `components/editor/workspace-shell.tsx` to bind collaborator states between the collaborative canvas and editor navbar.
+  - Created automated test suite in `test/presence-avatars-cursors.test.ts` covering awareness state lifecycle, multi-client awareness sync, local user exclusion, avatar stack math, initials extraction, and ephemeral cursor broadcasting.
 - 18-starter-templates.md: Implemented starter architecture template library, lightweight SVG preview diagram modal, and single-transaction atomic canvas replacement.
   - Created `components/editor/starter-templates.ts` with `CanvasTemplate` type, template builder helpers, and 4 architecture diagrams (Microservices, CI/CD Pipeline, Event-Driven Streaming, and AI/RAG Pipeline).
   - Built `components/editor/starter-templates-modal.tsx` with dialog wrapper, responsive scrollable card grid, and lightweight SVG diagram preview calculator (bounding box calculation, bezier curves, archetype color rendering).

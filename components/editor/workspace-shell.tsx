@@ -12,6 +12,7 @@ import { DeleteProjectDialog } from "@/components/editor/dialogs/delete-project-
 import { ShareDialog } from "@/components/editor/dialogs/share-dialog";
 import { CollaborativeCanvas } from "@/components/canvas/collaborative-canvas";
 import { Project } from "@/types/project";
+import { RemoteCollaborator } from "@/types/canvas";
 
 interface WorkspaceShellProps {
   project: {
@@ -34,6 +35,7 @@ export function WorkspaceShell({
   const [isAiSidebarOpen, setIsAiSidebarOpen] = useState(false);
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [isTemplatesOpen, setIsTemplatesOpen] = useState(false);
+  const [collaborators, setCollaborators] = useState<RemoteCollaborator[]>([]);
 
   const {
     isCreateOpen,
@@ -69,6 +71,7 @@ export function WorkspaceShell({
         onOpenShare={() => setIsShareOpen(true)}
         onOpenTemplates={() => setIsTemplatesOpen(true)}
         showWorkspaceActions={true}
+        collaborators={collaborators}
       />
 
       {/* Main Workspace Area */}
@@ -81,6 +84,7 @@ export function WorkspaceShell({
             isTemplatesOpen={isTemplatesOpen}
             onOpenTemplates={() => setIsTemplatesOpen(true)}
             onCloseTemplates={() => setIsTemplatesOpen(false)}
+            onCollaboratorsChange={setCollaborators}
           />
         </main>
 
