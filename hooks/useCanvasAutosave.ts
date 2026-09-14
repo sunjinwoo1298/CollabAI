@@ -13,6 +13,7 @@ export interface UseCanvasAutosaveOptions {
   edgesMap: Y.Map<any>;
   isReady: boolean;
   disabled?: boolean;
+  isAutosaveEnabled?: boolean;
   debounceMs?: number;
 }
 
@@ -31,6 +32,7 @@ export function useCanvasAutosave({
   edgesMap,
   isReady,
   disabled = false,
+  isAutosaveEnabled = true,
   debounceMs = 1500,
 }: UseCanvasAutosaveOptions): UseCanvasAutosaveResult {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
@@ -51,7 +53,7 @@ export function useCanvasAutosave({
     return { nodes, edges };
   }, [nodesMap, edgesMap]);
 
-  // Core save execution function
+  // Core save execution function (Works for both autosave and manual save)
   const executeSave = useCallback(async (): Promise<boolean> => {
     if (!projectId || disabled || !isReady) {
       return false;
@@ -127,7 +129,7 @@ export function useCanvasAutosave({
 
   // Schedule debounced autosave
   const scheduleAutosave = useCallback(() => {
-    if (!isReady || disabled) return;
+    if (!isReady || disabled || !isAutosaveEnabled) return;
 
     isDirtyRef.current = true;
     if (isMountedRef.current) {
@@ -142,7 +144,15 @@ export function useCanvasAutosave({
       debounceTimerRef.current = null;
       executeSave();
     }, debounceMs);
-  }, [isReady, disabled, debounceMs, executeSave]);
+  }, [isReady, disabled, isAutosaveEnabled, debounceMs, executeSave]);
+
+  // Clear debounce timer if autosave is toggled off
+  useEffect(() => {
+    if (!isAutosaveEnabled && debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+  }, [isAutosaveEnabled]);
 
   // Observe Yjs document mutations
   useEffect(() => {
@@ -153,8 +163,8 @@ export function useCanvasAutosave({
       _update: Uint8Array,
       origin: string | object | null | undefined
     ) => {
-      // 1. Keep autosave strictly disabled until initial restoration is finished
-      if (!isReady || disabled) return;
+      // 1. Keep autosave strictly disabled until initial restoration is finished or if autosave is disabled
+      if (!isReady || disabled || !isAutosaveEnabled) return;
 
       // 2. Ignore blob-restore and redis-cache-restore transactions so initial restoration does not re-trigger save
       if (origin === "blob-restore" || origin === "redis-cache-restore") {
@@ -176,8 +186,8 @@ export function useCanvasAutosave({
         debounceTimerRef.current = null;
       }
 
-      // Best-effort flush on unmount if pending changes exist
-      if (isDirtyRef.current && isReady && projectId) {
+      // Best-effort flush on unmount if pending changes exist and autosave is enabled
+      if (isDirtyRef.current && isReady && isAutosaveEnabled && projectId) {
         try {
           const payload = {
             nodes: Array.from(nodesMap.values()),
@@ -196,7 +206,7 @@ export function useCanvasAutosave({
         }
       }
     };
-  }, [doc, isReady, disabled, projectId, nodesMap, edgesMap, scheduleAutosave]);
+  }, [doc, isReady, disabled, isAutosaveEnabled, projectId, nodesMap, edgesMap, scheduleAutosave]);
 
   // Best-effort beforeunload listener
   useEffect(() => {

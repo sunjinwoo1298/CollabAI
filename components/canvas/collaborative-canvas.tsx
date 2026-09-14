@@ -51,6 +51,7 @@ interface CollaborativeCanvasProps {
   onCloseTemplates?: () => void;
   onCollaboratorsChange?: (collaborators: RemoteCollaborator[]) => void;
   onSaveStatusChange?: (status: SaveStatus, saveNow: () => Promise<boolean>) => void;
+  isAutosaveEnabled?: boolean;
 }
 
 const nodeTypes = {
@@ -122,6 +123,7 @@ function CollaborativeCanvasInner({
   onCloseTemplates,
   onCollaboratorsChange,
   onSaveStatusChange,
+  isAutosaveEnabled = true,
 }: CollaborativeCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
@@ -221,13 +223,14 @@ function CollaborativeCanvasInner({
     checkAndRestore();
   }, [isSynced, projectId, nodesMap, edgesMap, doc, fitView]);
 
-  // 3. Debounced Autosave Hook (Disabled until initial restoration is completed)
+  // 3. Debounced Autosave Hook (Disabled until initial restoration is completed or if autosave is toggled off)
   const { saveStatus, saveNow } = useCanvasAutosave({
     projectId,
     doc,
     nodesMap,
     edgesMap,
     isReady,
+    isAutosaveEnabled,
   });
 
   // Notify parent component of save status and manual save trigger

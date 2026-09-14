@@ -20,6 +20,8 @@ interface EditorNavbarProps {
   collaborators?: RemoteCollaborator[];
   saveStatus?: SaveStatus;
   onSaveNow?: () => void;
+  isAutosaveEnabled?: boolean;
+  onToggleAutosave?: () => void;
 }
 
 export function EditorNavbar({
@@ -34,6 +36,8 @@ export function EditorNavbar({
   collaborators = [],
   saveStatus = "idle",
   onSaveNow,
+  isAutosaveEnabled = true,
+  onToggleAutosave,
 }: EditorNavbarProps) {
   return (
     <header className="h-14 border-b border-default bg-base flex items-center justify-between px-4 shrink-0 z-50">
@@ -73,6 +77,41 @@ export function EditorNavbar({
       <div className="flex items-center justify-end gap-2 w-auto sm:w-1/3 min-w-0">
         {showWorkspaceActions && (
           <>
+            {/* Autosave Toggle Switch */}
+            {onToggleAutosave && (
+              <button
+                type="button"
+                onClick={onToggleAutosave}
+                className={cn(
+                  "h-8 px-2.5 rounded-lg border text-xs font-medium flex items-center gap-2 transition-all cursor-pointer select-none",
+                  isAutosaveEnabled
+                    ? "bg-surface/80 border-default text-primary hover:bg-subtle"
+                    : "bg-surface/40 border-default/60 text-muted hover:text-primary hover:bg-subtle"
+                )}
+                title={
+                  isAutosaveEnabled
+                    ? "Autosave is ON (click to turn OFF)"
+                    : "Autosave is OFF (click to turn ON)"
+                }
+                aria-label="Toggle autosave"
+              >
+                <span className="text-[11px] font-medium hidden sm:inline">Autosave</span>
+                <div
+                  className={cn(
+                    "w-7 h-4 rounded-full transition-colors relative flex items-center p-0.5",
+                    isAutosaveEnabled ? "bg-brand" : "bg-default"
+                  )}
+                >
+                  <div
+                    className={cn(
+                      "w-3 h-3 rounded-full bg-white transition-transform transform shadow-sm",
+                      isAutosaveEnabled ? "translate-x-3" : "translate-x-0"
+                    )}
+                  />
+                </div>
+              </button>
+            )}
+
             {/* Manual Save Button & Status Indicator */}
             {onSaveNow && (
               <Button

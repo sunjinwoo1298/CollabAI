@@ -37,6 +37,7 @@ export function WorkspaceShell({
   const [isTemplatesOpen, setIsTemplatesOpen] = useState(false);
   const [collaborators, setCollaborators] = useState<RemoteCollaborator[]>([]);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [isAutosaveEnabled, setIsAutosaveEnabled] = useState(true);
   const saveNowRef = useRef<(() => Promise<boolean>) | null>(null);
 
   const handleSaveStatusChange = useCallback(
@@ -51,6 +52,10 @@ export function WorkspaceShell({
     if (saveNowRef.current) {
       saveNowRef.current();
     }
+  }, []);
+
+  const handleToggleAutosave = useCallback(() => {
+    setIsAutosaveEnabled((prev) => !prev);
   }, []);
 
   const {
@@ -90,6 +95,8 @@ export function WorkspaceShell({
         collaborators={collaborators}
         saveStatus={saveStatus}
         onSaveNow={handleManualSave}
+        isAutosaveEnabled={isAutosaveEnabled}
+        onToggleAutosave={handleToggleAutosave}
       />
 
       {/* Main Workspace Area */}
@@ -104,6 +111,7 @@ export function WorkspaceShell({
             onCloseTemplates={() => setIsTemplatesOpen(false)}
             onCollaboratorsChange={setCollaborators}
             onSaveStatusChange={handleSaveStatusChange}
+            isAutosaveEnabled={isAutosaveEnabled}
           />
         </main>
 
