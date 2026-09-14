@@ -1,10 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Sparkles, X, Bot } from "lucide-react";
 import { EditorNavbar } from "@/components/editor/editor-navbar";
 import { ProjectSidebar } from "@/components/editor/project-sidebar";
-import { Button } from "@/components/ui/button";
+import { AiSidebar } from "@/components/editor/ai-sidebar";
 import { useProjectActions } from "@/hooks/useProjectActions";
 import { CreateProjectDialog } from "@/components/editor/dialogs/create-project-dialog";
 import { RenameProjectDialog } from "@/components/editor/dialogs/rename-project-dialog";
@@ -100,46 +99,11 @@ export function WorkspaceShell({
           onOpenDelete={openDelete}
         />
 
-        {/* Floating Right AI Sidebar Placeholder */}
-        {isAiSidebarOpen && (
-          <aside className="absolute inset-y-0 right-0 w-80 lg:w-96 border-l border-default bg-surface/95 backdrop-blur-xl flex flex-col h-full z-40 shadow-2xl animate-in slide-in-from-right duration-200">
-            <div className="h-14 border-b border-default px-4 flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-ai" />
-                <h3 className="text-sm font-semibold text-primary">AI Assistant</h3>
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setIsAiSidebarOpen(false)}
-                className="h-7 w-7 text-muted hover:text-primary"
-                title="Close AI Assistant"
-                aria-label="Close AI Assistant"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-
-            <div className="flex-1 p-6 flex flex-col items-center justify-center text-center space-y-4 overflow-y-auto">
-              <div className="h-14 w-14 rounded-2xl bg-ai/10 border border-ai/20 flex items-center justify-center text-ai">
-                <Bot className="h-7 w-7" />
-              </div>
-              <div className="space-y-2 max-w-xs">
-                <h4 className="text-sm font-semibold text-primary">
-                  AI Architecture Assistant
-                </h4>
-                <p className="text-xs text-muted leading-relaxed">
-                  Interactive AI design chat, system diagram generation, and architecture synthesis will appear here.
-                </p>
-              </div>
-              <div className="pt-2">
-                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-medium tracking-wide uppercase bg-ai/10 text-ai-muted border border-ai/30">
-                  Coming Soon
-                </span>
-              </div>
-            </div>
-          </aside>
-        )}
+        {/* Floating Right AI Workspace Sidebar */}
+        <AiSidebar
+          isOpen={isAiSidebarOpen}
+          onClose={() => setIsAiSidebarOpen(false)}
+        />
       </div>
 
       {/* Share Dialog */}

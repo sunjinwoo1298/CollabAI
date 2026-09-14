@@ -4,14 +4,22 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Current Phase
 
-- Phase 3: Project APIs & Editor Wiring
+- Phase 5: AI Workspace & Spec Generation
 
 ## Current Goal
 
-- Next feature in roadmap
+- 21-canvas-autosave.md (or next AI / Canvas persistence feature)
 
 ## Completed
 
+- 20-ai-sidebar-shell.md: Implemented dedicated floating AI Workspace sidebar component with tabbed navigation, conversational AI Architect chat UI, starter prompt pills, dynamic auto-resizing input, and Specs tab with demo specification card.
+  - Built `components/editor/ai-sidebar.tsx` with floating slide-in panel layout (`bg-base/95 backdrop-blur-xl border-l border-default shadow-2xl`), controlled open/close lifecycle, and responsive design.
+  - Created sidebar header with `AI Workspace` title (`text-primary`), `Collaborate with Collab AI` subtitle (`text-muted`), bot icon badge, and close button.
+  - Integrated shadcn `Tabs` with two distinct workspaces: `AI Architect` and `Specs`.
+  - Implemented AI Architect tab featuring an empty state with bot badge, assistant description, 3 starter prompt pills (`Design an e-commerce backend`, `Create a chat app architecture`, `Build a CI/CD pipeline`) that pre-fill the input, scrollable chat message feed with right-aligned user bubbles (`bg-brand-dim border-2 border-brand/50`) and left-aligned assistant bubbles (`bg-elevated border border-default`), and auto-resizing input textarea (72px - 160px) supporting `Enter` submission and `Shift+Enter` newlines.
+  - Implemented Specs tab with primary `Generate Spec` action button (`bg-ai text-white`), demo specification card (`bg-elevated border border-default`) with status badge and disabled download action, and explanatory guidance banner.
+  - Updated `components/editor/workspace-shell.tsx` to cleanly render `<AiSidebar>` controlled via existing navbar toggle button.
+  - Created unit tests in `test/ai-sidebar.test.ts` and updated `package.json` test scripts.
 - 19-presence-avatars-cursors.md: Implemented real-time participant avatars, initials fallback, deterministic colors, +N overflow indicator, and live collaborative cursors inside the collaborative editor workspace.
   - Built `components/canvas/presence/participant-avatar-group.tsx` with overlapping participant stack, max 5 visible avatars, `+N` overflow indicator, user avatar support with `getInitials` fallback, deterministic collaboration color background, and `ring-2 ring-base` contrast.
   - Integrated `ParticipantAvatarGroup` into `components/editor/editor-navbar.tsx` alongside a conditional vertical divider and the Clerk `UserButton`, rendering only for remote peers when connected in an active workspace.
@@ -63,4 +71,5 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Session Notes
 
+- Completed 20-ai-sidebar-shell.md. Implemented dedicated AI Workspace floating sidebar component (`components/editor/ai-sidebar.tsx`) replacing previous static placeholder in `components/editor/workspace-shell.tsx`. Features custom header with bot icon badge and close action, shadcn `Tabs` (`AI Architect` and `Specs`), AI Architect chat empty state with 3 clickable starter prompt pills, right-aligned user chat bubbles, left-aligned assistant chat bubbles, auto-resizing input textarea (72px to 160px) with Enter-submit & Shift+Enter newlines, and Specs tab with `Generate Spec` trigger and demo specification card. Verified complete test suite and production build.
 - Completed 10-Yjs-setup.md. Implemented Yjs and y-websocket real-time CRDT collaboration infrastructure: created `types/collaboration.ts`, `lib/collaboration-color.ts` (10-color deterministic hashing), `lib/room-jwt.ts`, `app/api/ws-auth/route.ts` (Clerk + Prisma membership auth and Room JWT issuance), standalone WebSocket server in `ws-server/` (JWT upgrade validation, y-websocket sync protocol, ephemeral awareness, Redis Pub/Sub cross-instance fan-out, delta cache), and `hooks/useYjsRoom.ts` (room lifecycle, token auth, reconnect re-authorization, 403 halt). Verified all 5 collaboration invariants, multi-client CRDT sync, awareness broadcasting, zero Liveblocks references, and successful `npm run build` compilation.
