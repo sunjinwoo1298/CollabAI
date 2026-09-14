@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { EditorNavbar } from "@/components/editor/editor-navbar";
 import { ProjectSidebar } from "@/components/editor/project-sidebar";
 import { AiSidebar } from "@/components/editor/ai-sidebar";
@@ -12,6 +12,7 @@ import { ShareDialog } from "@/components/editor/dialogs/share-dialog";
 import { CollaborativeCanvas } from "@/components/canvas/collaborative-canvas";
 import { Project } from "@/types/project";
 import { RemoteCollaborator } from "@/types/canvas";
+import { SaveStatus } from "@/hooks/useCanvasAutosave";
 
 interface WorkspaceShellProps {
   project: {
@@ -35,6 +36,22 @@ export function WorkspaceShell({
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [isTemplatesOpen, setIsTemplatesOpen] = useState(false);
   const [collaborators, setCollaborators] = useState<RemoteCollaborator[]>([]);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const saveNowRef = useRef<(() => Promise<boolean>) | null>(null);
+
+  const handleSaveStatusChange = useCallback(
+    (status: SaveStatus, saveNow: () => Promise<boolean>) => {
+      setSaveStatus(status);
+      saveNowRef.current = saveNow;
+    },
+    []
+  );
+
+  const handleManualSave = useCallback(() => {
+    if (saveNowRef.current) {
+      saveNowRef.current();
+    }
+  }, []);
 
   const {
     isCreateOpen,
@@ -71,6 +88,8 @@ export function WorkspaceShell({
         onOpenTemplates={() => setIsTemplatesOpen(true)}
         showWorkspaceActions={true}
         collaborators={collaborators}
+        saveStatus={saveStatus}
+        onSaveNow={handleManualSave}
       />
 
       {/* Main Workspace Area */}
@@ -84,6 +103,7 @@ export function WorkspaceShell({
             onOpenTemplates={() => setIsTemplatesOpen(true)}
             onCloseTemplates={() => setIsTemplatesOpen(false)}
             onCollaboratorsChange={setCollaborators}
+            onSaveStatusChange={handleSaveStatusChange}
           />
         </main>
 

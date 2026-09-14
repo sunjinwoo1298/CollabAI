@@ -16,6 +16,7 @@ export interface ProjectAccessResult {
     name: string;
     description: string | null;
     ownerId: string;
+    canvasJsonPath: string | null;
     createdAt: Date;
     updatedAt: Date;
   } | null;
@@ -116,6 +117,7 @@ export async function getProjectAccess(roomId: string): Promise<ProjectAccessRes
           name: project.name,
           description: project.description,
           ownerId: project.ownerId,
+          canvasJsonPath: project.canvasJsonPath,
           createdAt: project.createdAt,
           updatedAt: project.updatedAt,
         },

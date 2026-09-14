@@ -34,6 +34,7 @@ import {
 import { useUser } from "@clerk/nextjs";
 import { useYjsRoom } from "@/hooks/useYjsRoom";
 import { useCanvasSync } from "@/hooks/useCanvasSync";
+import { useCanvasAutosave, SaveStatus } from "@/hooks/useCanvasAutosave";
 import { SystemNode } from "@/components/canvas/nodes/system-node";
 import { CollaboratorCursors } from "@/components/canvas/cursors/collaborator-cursor";
 import { CanvasNode, CanvasNodeType, RemoteCollaborator } from "@/types/canvas";
@@ -49,6 +50,7 @@ interface CollaborativeCanvasProps {
   onOpenTemplates?: () => void;
   onCloseTemplates?: () => void;
   onCollaboratorsChange?: (collaborators: RemoteCollaborator[]) => void;
+  onSaveStatusChange?: (status: SaveStatus, saveNow: () => Promise<boolean>) => void;
 }
 
 const nodeTypes = {
@@ -62,56 +64,56 @@ export const NODE_PRESETS: Array<{
   description: string;
   icon: typeof Server;
 }> = [
-  {
-    type: "client",
-    label: "Web App Client",
-    sublabel: "Next.js / React Frontend",
-    description: "User-facing web client application",
-    icon: Monitor,
-  },
-  {
-    type: "gateway",
-    label: "API Gateway",
-    sublabel: "Reverse Proxy & Router",
-    description: "Routes traffic, rate limits, and terminates TLS",
-    icon: Network,
-  },
-  {
-    type: "service",
-    label: "Backend Service",
-    sublabel: "Core Application Server",
-    description: "Handles business logic and data processing",
-    icon: Server,
-  },
-  {
-    type: "database",
-    label: "PostgreSQL DB",
-    sublabel: "Relational Database",
-    description: "Primary persistent relational storage",
-    icon: Database,
-  },
-  {
-    type: "cache",
-    label: "Redis Cache",
-    sublabel: "In-Memory Key-Value",
-    description: "High-speed caching & pub/sub layer",
-    icon: Zap,
-  },
-  {
-    type: "queue",
-    label: "Message Queue",
-    sublabel: "Kafka / RabbitMQ",
-    description: "Asynchronous task and event broker",
-    icon: Layers,
-  },
-  {
-    type: "storage",
-    label: "Object Storage",
-    sublabel: "AWS S3 / Blob Store",
-    description: "Scalable static asset and file store",
-    icon: HardDrive,
-  },
-];
+    {
+      type: "client",
+      label: "Web App Client",
+      sublabel: "Next.js / React Frontend",
+      description: "User-facing web client application",
+      icon: Monitor,
+    },
+    {
+      type: "gateway",
+      label: "API Gateway",
+      sublabel: "Reverse Proxy & Router",
+      description: "Routes traffic, rate limits, and terminates TLS",
+      icon: Network,
+    },
+    {
+      type: "service",
+      label: "Backend Service",
+      sublabel: "Core Application Server",
+      description: "Handles business logic and data processing",
+      icon: Server,
+    },
+    {
+      type: "database",
+      label: "PostgreSQL DB",
+      sublabel: "Relational Database",
+      description: "Primary persistent relational storage",
+      icon: Database,
+    },
+    {
+      type: "cache",
+      label: "Redis Cache",
+      sublabel: "In-Memory Key-Value",
+      description: "High-speed caching & pub/sub layer",
+      icon: Zap,
+    },
+    {
+      type: "queue",
+      label: "Message Queue",
+      sublabel: "Kafka / RabbitMQ",
+      description: "Asynchronous task and event broker",
+      icon: Layers,
+    },
+    {
+      type: "storage",
+      label: "Object Storage",
+      sublabel: "AWS S3 / Blob Store",
+      description: "Scalable static asset and file store",
+      icon: HardDrive,
+    },
+  ];
 
 function CollaborativeCanvasInner({
   projectId,
@@ -119,11 +121,13 @@ function CollaborativeCanvasInner({
   onOpenTemplates,
   onCloseTemplates,
   onCollaboratorsChange,
+  onSaveStatusChange,
 }: CollaborativeCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
   const [isConfirmClearOpen, setIsConfirmClearOpen] = useState(false);
   const [internalIsTemplatesOpen, setInternalIsTemplatesOpen] = useState(false);
+  const [isReady, setIsReady] = useState(false);
 
   const { user: clerkUser } = useUser();
 
@@ -152,6 +156,7 @@ function CollaborativeCanvasInner({
     provider,
     awareness,
     connectionState,
+    isSynced,
     nodesMap,
     edgesMap,
     error: roomError,
@@ -159,7 +164,78 @@ function CollaborativeCanvasInner({
     updatePresence,
   } = useYjsRoom(projectId);
 
-  // 2. Synchronize Canvas State with Yjs (excluding current Clerk user)
+  // 2. Initial Canvas Restoration Lifecycle (Empty room fallback from Vercel Blob)
+  const hasCheckedRestoreRef = useRef(false);
+  const isRestoringRef = useRef(false);
+
+  useEffect(() => {
+    if (!isSynced || hasCheckedRestoreRef.current || isRestoringRef.current) return;
+
+    async function checkAndRestore() {
+      // If room already contains nodes or edges, Yjs is authoritative -> do not load Blob
+      if (nodesMap.size > 0 || edgesMap.size > 0) {
+        hasCheckedRestoreRef.current = true;
+        setIsReady(true);
+        return;
+      }
+
+      // Room is empty -> request saved canvas snapshot from GET /api/projects/[projectId]/canvas
+      isRestoringRef.current = true;
+      try {
+        const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/canvas`);
+        if (res.ok) {
+          const data = await res.json();
+
+          // CRITICAL: Re-check Yjs immediately before restoring the Blob to ensure
+          // a concurrent collaborator didn't populate the room during the fetch
+          if (
+            nodesMap.size === 0 &&
+            edgesMap.size === 0 &&
+            Array.isArray(data.nodes) &&
+            (data.nodes.length > 0 || (Array.isArray(data.edges) && data.edges.length > 0))
+          ) {
+            doc.transact(() => {
+              for (const node of data.nodes) {
+                nodesMap.set(node.id, node);
+              }
+              for (const edge of (data.edges || [])) {
+                edgesMap.set(edge.id, edge);
+              }
+            }, "blob-restore");
+
+            // Fit view after restoring snapshot
+            setTimeout(() => {
+              fitView({ duration: 300, padding: 0.2 });
+            }, 100);
+          }
+        }
+      } catch (err) {
+        console.warn("[CollaborativeCanvas] Error during initial canvas restoration:", err);
+      } finally {
+        isRestoringRef.current = false;
+        hasCheckedRestoreRef.current = true;
+        setIsReady(true);
+      }
+    }
+
+    checkAndRestore();
+  }, [isSynced, projectId, nodesMap, edgesMap, doc, fitView]);
+
+  // 3. Debounced Autosave Hook (Disabled until initial restoration is completed)
+  const { saveStatus, saveNow } = useCanvasAutosave({
+    projectId,
+    doc,
+    nodesMap,
+    edgesMap,
+    isReady,
+  });
+
+  // Notify parent component of save status and manual save trigger
+  useEffect(() => {
+    onSaveStatusChange?.(saveStatus, saveNow);
+  }, [saveStatus, saveNow, onSaveStatusChange]);
+
+  // 4. Synchronize Canvas State with Yjs (excluding current Clerk user)
   const {
     nodes,
     edges,
@@ -425,7 +501,7 @@ function CollaborativeCanvasInner({
           animated: true,
           style: { stroke: "#64748B", strokeWidth: 2 },
         }}
-        proOptions={{ hideAttribution: true }}
+      // proOptions={{ hideAttribution: true }}
       >
         {/* Infinite Background Dot Grid */}
         <Background

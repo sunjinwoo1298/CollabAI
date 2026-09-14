@@ -1,11 +1,12 @@
 "use client";
 
-import { PanelLeftOpen, PanelLeftClose, Share2, Sparkles, LayoutTemplate } from "lucide-react";
+import { PanelLeftOpen, PanelLeftClose, Share2, Sparkles, LayoutTemplate, Loader2, CloudCheck, AlertCircle, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { UserButton } from "@clerk/nextjs";
 import { cn } from "@/lib/utils";
 import { RemoteCollaborator } from "@/types/canvas";
 import { ParticipantAvatarGroup } from "@/components/canvas/presence/participant-avatar-group";
+import { SaveStatus } from "@/hooks/useCanvasAutosave";
 
 interface EditorNavbarProps {
   isSidebarOpen: boolean;
@@ -17,6 +18,8 @@ interface EditorNavbarProps {
   onOpenTemplates?: () => void;
   showWorkspaceActions?: boolean;
   collaborators?: RemoteCollaborator[];
+  saveStatus?: SaveStatus;
+  onSaveNow?: () => void;
 }
 
 export function EditorNavbar({
@@ -29,6 +32,8 @@ export function EditorNavbar({
   onOpenTemplates,
   showWorkspaceActions = false,
   collaborators = [],
+  saveStatus = "idle",
+  onSaveNow,
 }: EditorNavbarProps) {
   return (
     <header className="h-14 border-b border-default bg-base flex items-center justify-between px-4 shrink-0 z-50">
@@ -53,7 +58,7 @@ export function EditorNavbar({
       {/* Center Section: Project name */}
       <div className="flex items-center justify-center flex-1 min-w-0 px-2">
         {projectName ? (
-          <div className="flex items-center gap-1.5 max-w-xs sm:max-w-md md:max-w-lg truncate">
+          <div className="flex items-center gap-2 max-w-xs sm:max-w-md md:max-w-lg truncate">
             <span
               className="text-sm font-semibold text-primary truncate"
               title={projectName}
@@ -68,6 +73,41 @@ export function EditorNavbar({
       <div className="flex items-center justify-end gap-2 w-auto sm:w-1/3 min-w-0">
         {showWorkspaceActions && (
           <>
+            {/* Manual Save Button & Status Indicator */}
+            {onSaveNow && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onSaveNow}
+                disabled={saveStatus === "saving"}
+                className={cn(
+                  "h-8 gap-1.5 text-xs font-medium border-default text-primary hover:bg-subtle hover:text-primary cursor-pointer disabled:opacity-70 transition-all",
+                  saveStatus === "saved" && "border-emerald-500/30 text-emerald-400 bg-emerald-500/5",
+                  saveStatus === "error" && "border-rose-500/40 text-rose-400 bg-rose-500/5"
+                )}
+                title="Save canvas manually"
+              >
+                {saveStatus === "saving" ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-brand" />
+                ) : saveStatus === "saved" ? (
+                  <CloudCheck className="h-3.5 w-3.5 text-emerald-400" />
+                ) : saveStatus === "error" ? (
+                  <AlertCircle className="h-3.5 w-3.5 text-rose-400" />
+                ) : (
+                  <Save className="h-3.5 w-3.5 text-muted hover:text-primary" />
+                )}
+                <span className="hidden sm:inline">
+                  {saveStatus === "saving"
+                    ? "Saving..."
+                    : saveStatus === "saved"
+                    ? "Saved"
+                    : saveStatus === "error"
+                    ? "Retry Save"
+                    : "Save"}
+                </span>
+              </Button>
+            )}
+
             {onOpenTemplates && (
               <Button
                 variant="outline"

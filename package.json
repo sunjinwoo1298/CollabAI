@@ -12,7 +12,8 @@
     "test:templates": "tsx test/starter-templates.test.ts",
     "test:sidebar": "tsx test/ai-sidebar.test.ts",
     "test:presence": "tsx test/presence-avatars-cursors.test.ts",
-    "test": "tsx test/canvas-sync.test.ts && tsx test/starter-templates.test.ts && tsx test/presence-avatars-cursors.test.ts && tsx test/ai-sidebar.test.ts",
+    "test:autosave": "tsx test/canvas-autosave.test.ts",
+    "test": "tsx test/canvas-sync.test.ts && tsx test/starter-templates.test.ts && tsx test/presence-avatars-cursors.test.ts && tsx test/ai-sidebar.test.ts && tsx test/canvas-autosave.test.ts",
     "lint": "eslint"
   },
   "dependencies": {
@@ -20,6 +21,7 @@
     "@clerk/themes": "^2.4.57",
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
+    "@vercel/blob": "^2.8.0",
     "@xyflow/react": "^12.11.6",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

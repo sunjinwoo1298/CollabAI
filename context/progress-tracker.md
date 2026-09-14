@@ -8,9 +8,18 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Current Goal
 
-- 21-canvas-autosave.md (or next AI / Canvas persistence feature)
+- Next AI Workspace / Spec generation or canvas feature
 
 ## Completed
+
+- 21-canvas-autosave.md: Implemented durable canvas autosave, Vercel Blob persistence, safe Yjs restoration lifecycle, debounced autosave hook, and save status navbar indicator.
+  - Installed `@vercel/blob` and built `app/api/projects/[projectId]/canvas/route.ts` with authenticated `PUT` (persisting serialized `{ nodes, edges }` to `canvas/{projectId}.json` and updating PostgreSQL `canvasJsonPath`) and `GET` (fetching and validating durable snapshot).
+  - Updated `lib/project-access.ts` to include `canvasJsonPath` on authenticated project access records.
+  - Enhanced `hooks/useYjsRoom.ts` with canonical `sync` event listener and exported `isSynced` flag.
+  - Built debounced autosave hook `hooks/useCanvasAutosave.ts` (~1.5s delay, in-flight save queuing, `"blob-restore"` / `"redis-cache-restore"` transaction origin suppression, and best-effort page-unload flushing).
+  - Integrated restoration lifecycle into `components/canvas/collaborative-canvas.tsx`: newly connected empty rooms fetch and atomically restore saved Blob snapshots via `doc.transact(..., "blob-restore")` with immediate Yjs state re-checking before execution to prevent concurrent peer clobbering, while active populated rooms strictly treat Yjs as authoritative without loading snapshots.
+  - Enhanced `components/editor/editor-navbar.tsx` and `components/editor/workspace-shell.tsx` with live save status pills (`Saving...`, `Saved`, `Save failed` with retry trigger).
+  - Created automated test suite in `test/canvas-autosave.test.ts` and added `test:autosave` to `package.json`.
 
 - 20-ai-sidebar-shell.md: Implemented dedicated floating AI Workspace sidebar component with tabbed navigation, conversational AI Architect chat UI, starter prompt pills, dynamic auto-resizing input, and Specs tab with demo specification card.
   - Built `components/editor/ai-sidebar.tsx` with floating slide-in panel layout (`bg-base/95 backdrop-blur-xl border-l border-default shadow-2xl`), controlled open/close lifecycle, and responsive design.

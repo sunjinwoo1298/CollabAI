@@ -19,6 +19,7 @@ export interface UseYjsRoomResult {
   provider: WebsocketProvider | null;
   awareness: Awareness | null;
   connectionState: ConnectionState;
+  isSynced: boolean;
   nodesMap: Y.Map<any>;
   edgesMap: Y.Map<any>;
   error: string | null;
@@ -35,6 +36,7 @@ export function useYjsRoom(projectId: string | null | undefined): UseYjsRoomResu
   const [provider, setProvider] = useState<WebsocketProvider | null>(null);
   const [awareness, setAwareness] = useState<Awareness | null>(null);
   const [connectionState, setConnectionState] = useState<ConnectionState>("idle");
+  const [isSynced, setIsSynced] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const providerRef = useRef<WebsocketProvider | null>(null);
@@ -47,6 +49,9 @@ export function useYjsRoom(projectId: string | null | undefined): UseYjsRoomResu
     if (!providerRef.current) return;
     const oldProvider = providerRef.current;
     providerRef.current = null;
+    if (isMountedRef.current) {
+      setIsSynced(false);
+    }
 
     try {
       // Disconnect and destroy
@@ -126,6 +131,11 @@ export function useYjsRoom(projectId: string | null | undefined): UseYjsRoomResu
       });
 
       // 4. Provider event listeners
+      wsProvider.on("sync", (synced: boolean) => {
+        if (!isMountedRef.current) return;
+        setIsSynced(synced);
+      });
+
       wsProvider.on("status", (event: { status: "connecting" | "connected" | "disconnected" }) => {
         if (!isMountedRef.current) return;
 
@@ -137,6 +147,7 @@ export function useYjsRoom(projectId: string | null | undefined): UseYjsRoomResu
         } else if (event.status === "disconnected") {
           if (!isUnauthorizedRef.current) {
             setConnectionState("disconnected");
+            setIsSynced(false);
           }
         }
       });
@@ -152,6 +163,7 @@ export function useYjsRoom(projectId: string | null | undefined): UseYjsRoomResu
         if (event?.code === 4403 || event?.code === 403) {
           isUnauthorizedRef.current = true;
           setConnectionState("unauthorized");
+          setIsSynced(false);
           setError("Session forbidden: access denied");
           wsProvider.disconnect();
           return;
@@ -160,6 +172,7 @@ export function useYjsRoom(projectId: string | null | undefined): UseYjsRoomResu
         // Standard close - mark disconnected (y-websocket handles automatic reconnect attempts with exponential backoff)
         if (!isUnauthorizedRef.current && isMountedRef.current) {
           setConnectionState("disconnected");
+          setIsSynced(false);
         }
       });
     } catch (err: any) {
@@ -167,6 +180,7 @@ export function useYjsRoom(projectId: string | null | undefined): UseYjsRoomResu
       console.error("[useYjsRoom] Connection error:", err);
       setError(err.message || "Failed to establish real-time collaboration");
       setConnectionState("error");
+      setIsSynced(false);
     } finally {
       isConnectingRef.current = false;
     }
@@ -211,6 +225,7 @@ export function useYjsRoom(projectId: string | null | undefined): UseYjsRoomResu
     provider,
     awareness,
     connectionState,
+    isSynced,
     nodesMap,
     edgesMap,
     error,
