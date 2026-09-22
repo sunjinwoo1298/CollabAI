@@ -41,9 +41,9 @@ yarn-error.log*
 next-env.d.ts
 
 /app/generated/prisma
-/test
-/current-issues
-/feature-specs
-/.claude
-/.windsurf
-/.claude-gen
+test
+current-issues
+.claude
+.windsurf
+.claude-gen
+feature-specs
