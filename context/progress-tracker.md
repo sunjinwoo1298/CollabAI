@@ -12,6 +12,14 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Completed
 
+- 22-design-agent-api.md: Implemented backend flow for Trigger.dev design generation, task run tracking in Prisma, and run-scoped public token generation.
+  - Defined `TaskRun` model in `prisma/models/task-run.prisma` with unique `runId`, `projectId`, `userId`, `createdAt`, unique constraint and index on `runId`, and compound index on `[userId, projectId]`. Synchronized database schema with PostgreSQL.
+  - Implemented minimal background task in `trigger/design-agent.ts` with ID `"design-agent"` accepting payload (`prompt`, `roomId`, `projectId`), logging and returning echo data without AI logic.
+  - Built `app/api/ai/design/route.ts` accepting design prompt and context (`roomId`, `projectId`), authenticating via Clerk, verifying project access, triggering Trigger.dev task via `tasks.trigger("design-agent", ...)`, storing `TaskRun` record in Prisma, and returning `runId`.
+  - Built `app/api/ai/design/token/route.ts` accepting `runId`, verifying ownership via `TaskRun` record (`userId === taskRun.userId`), generating a run-scoped public token via Trigger.dev SDK `auth.createPublicToken({ scopes: { read: { runs: [runId] } } })`, and returning the public token to the client.
+  - Created automated test suite in `test/design-agent-api.test.ts` verifying task callability, `TaskRun` CRUD with index lookups, live Trigger.dev task triggering, and run-scoped public token minting.
+  - Added `test:design-api` to `package.json` and verified `npm run build` succeeds cleanly.
+
 - 21-canvas-autosave.md: Implemented durable canvas autosave, Vercel Blob persistence, safe Yjs restoration lifecycle, debounced autosave hook, and save status navbar indicator.
   - Installed `@vercel/blob` and built `app/api/projects/[projectId]/canvas/route.ts` with authenticated `PUT` (persisting serialized `{ nodes, edges }` to `canvas/{projectId}.json` and updating PostgreSQL `canvasJsonPath`) and `GET` (fetching and validating durable snapshot).
   - Updated `lib/project-access.ts` to include `canvasJsonPath` on authenticated project access records.
@@ -80,5 +88,6 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Session Notes
 
+- Completed 22-design-agent-api.md. Set up the backend flow for Trigger.dev design generation: created Prisma `TaskRun` tracking model, created Trigger.dev `design-agent` task (`trigger/design-agent.ts`), added `POST /api/ai/design` route to trigger background jobs and record task runs, and added `POST /api/ai/design/token` route to verify task run ownership and mint run-scoped public access tokens. Verified with comprehensive test suite (`test/design-agent-api.test.ts`) and full Next.js production build.
 - Completed 20-ai-sidebar-shell.md. Implemented dedicated AI Workspace floating sidebar component (`components/editor/ai-sidebar.tsx`) replacing previous static placeholder in `components/editor/workspace-shell.tsx`. Features custom header with bot icon badge and close action, shadcn `Tabs` (`AI Architect` and `Specs`), AI Architect chat empty state with 3 clickable starter prompt pills, right-aligned user chat bubbles, left-aligned assistant chat bubbles, auto-resizing input textarea (72px to 160px) with Enter-submit & Shift+Enter newlines, and Specs tab with `Generate Spec` trigger and demo specification card. Verified complete test suite and production build.
 - Completed 10-Yjs-setup.md. Implemented Yjs and y-websocket real-time CRDT collaboration infrastructure: created `types/collaboration.ts`, `lib/collaboration-color.ts` (10-color deterministic hashing), `lib/room-jwt.ts`, `app/api/ws-auth/route.ts` (Clerk + Prisma membership auth and Room JWT issuance), standalone WebSocket server in `ws-server/` (JWT upgrade validation, y-websocket sync protocol, ephemeral awareness, Redis Pub/Sub cross-instance fan-out, delta cache), and `hooks/useYjsRoom.ts` (room lifecycle, token auth, reconnect re-authorization, 403 halt). Verified all 5 collaboration invariants, multi-client CRDT sync, awareness broadcasting, zero Liveblocks references, and successful `npm run build` compilation.

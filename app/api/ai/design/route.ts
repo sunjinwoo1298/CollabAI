@@ -1,0 +1,109 @@
+import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
+import { tasks } from "@trigger.dev/sdk";
+import { prisma } from "@/lib/prisma";
+import { getProjectAccess } from "@/lib/project-access";
+import type { designAgentTask } from "@/trigger/design-agent";
+
+/**
+ * POST /api/ai/design
+ * Triggers the Trigger.dev design task, stores the TaskRun tracking record in Prisma,
+ * and returns the run ID to the client.
+ */
+export async function POST(req: NextRequest) {
+  // 1. Authenticate via Clerk
+  const { userId } = await auth();
+  if (!userId) {
+    return NextResponse.json(
+      { error: "Unauthorized" },
+      { status: 401 }
+    );
+  }
+
+  // 2. Validate request body
+  let body: { prompt?: unknown; roomId?: unknown; projectId?: unknown };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json(
+      { error: "Invalid JSON body" },
+      { status: 400 }
+    );
+  }
+
+  const { prompt, roomId, projectId } = body;
+
+  if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
+    return NextResponse.json(
+      { error: "Prompt is required and must be a non-empty string" },
+      { status: 400 }
+    );
+  }
+
+  const cleanPrompt = prompt.trim();
+  const rawProjectId = typeof projectId === "string" ? projectId.trim() : "";
+  const rawRoomId = typeof roomId === "string" ? roomId.trim() : "";
+  const targetProjectId = rawProjectId || rawRoomId;
+  const targetRoomId = rawRoomId || rawProjectId;
+
+  if (!targetProjectId) {
+    return NextResponse.json(
+      { error: "projectId or roomId is required" },
+      { status: 400 }
+    );
+  }
+
+  // 3. Verify project access
+  try {
+    const access = await getProjectAccess(targetProjectId);
+
+    if (!access.authenticated) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (!access.project) {
+      return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    }
+
+    if (!access.hasAccess) {
+      return NextResponse.json(
+        { error: "Forbidden: You do not have access to this project" },
+        { status: 403 }
+      );
+    }
+
+    // 4. Trigger the design task through Trigger.dev
+    const handle = await tasks.trigger<typeof designAgentTask>("design-agent", {
+      prompt: cleanPrompt,
+      roomId: targetRoomId,
+      projectId: targetProjectId,
+    });
+
+    const runId = handle.id;
+
+    // 5. Create TaskRun record in Prisma
+    const taskRun = await prisma.taskRun.create({
+      data: {
+        runId,
+        projectId: targetProjectId,
+        userId,
+      },
+    });
+
+    // 6. Return the run ID to the client
+    return NextResponse.json(
+      {
+        runId: taskRun.runId,
+        taskId: "design-agent",
+        projectId: taskRun.projectId,
+      },
+      { status: 201 }
+    );
+  } catch (error) {
+    console.error("Error triggering design task:", error);
+    return NextResponse.json(
+      { error: "Failed to trigger design task" },
+      { status: 500 }
+    );
+  }
+}
