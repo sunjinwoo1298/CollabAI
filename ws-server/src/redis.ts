@@ -1,13 +1,14 @@
 import Redis from "ioredis";
 import crypto from "crypto";
+import { RoomChatMessage } from "../../types/collaboration";
 
 export const SERVER_ID = `ws_srv_${crypto.randomUUID()}`;
 
 export interface RedisMessage {
   serverId: string;
   roomId: string;
-  type: "doc-update" | "awareness";
-  payload: string; // base64 encoded binary
+  type: "doc-update" | "awareness" | "chat";
+  payload: string; // base64 encoded binary or JSON string
   timestamp: number;
 }
 
@@ -20,6 +21,7 @@ export class RedisPubSubManager {
     {
       onDocUpdate: (update: Uint8Array) => void;
       onAwarenessUpdate: (update: Uint8Array) => void;
+      onChatMessage?: (message: RoomChatMessage) => void;
     }
   >();
 
@@ -90,12 +92,19 @@ export class RedisPubSubManager {
         const callbacks = this.roomCallbacks.get(msg.roomId);
         if (!callbacks) return;
 
-        const binaryPayload = new Uint8Array(Buffer.from(msg.payload, "base64"));
-
         if (msg.type === "doc-update") {
+          const binaryPayload = new Uint8Array(Buffer.from(msg.payload, "base64"));
           callbacks.onDocUpdate(binaryPayload);
         } else if (msg.type === "awareness") {
+          const binaryPayload = new Uint8Array(Buffer.from(msg.payload, "base64"));
           callbacks.onAwarenessUpdate(binaryPayload);
+        } else if (msg.type === "chat") {
+          try {
+            const chatMessage = JSON.parse(msg.payload) as RoomChatMessage;
+            callbacks.onChatMessage?.(chatMessage);
+          } catch (err) {
+            console.error("[Redis] Error parsing chat message payload:", err);
+          }
         }
       } catch (err) {
         console.error("[Redis] Error parsing pubsub message:", err);
@@ -109,9 +118,10 @@ export class RedisPubSubManager {
   public async subscribeToRoom(
     roomId: string,
     onDocUpdate: (update: Uint8Array) => void,
-    onAwarenessUpdate: (update: Uint8Array) => void
+    onAwarenessUpdate: (update: Uint8Array) => void,
+    onChatMessage?: (message: RoomChatMessage) => void
   ) {
-    this.roomCallbacks.set(roomId, { onDocUpdate, onAwarenessUpdate });
+    this.roomCallbacks.set(roomId, { onDocUpdate, onAwarenessUpdate, onChatMessage });
 
     if (this.subClient && this.isConnected) {
       try {
@@ -184,6 +194,27 @@ export class RedisPubSubManager {
       await this.pubClient.publish(`yjs:room:${roomId}`, JSON.stringify(msg));
     } catch (err) {
       console.warn(`[Redis] Failed to publish awareness for ${roomId}:`, err);
+    }
+  }
+
+  /**
+   * Publishes a validated room chat message to other WebSocket instances via Redis Pub/Sub.
+   */
+  public async publishChatMessage(roomId: string, message: RoomChatMessage) {
+    if (!this.pubClient || !this.isConnected) return;
+
+    const msg: RedisMessage = {
+      serverId: SERVER_ID,
+      roomId,
+      type: "chat",
+      payload: JSON.stringify(message),
+      timestamp: Date.now(),
+    };
+
+    try {
+      await this.pubClient.publish(`yjs:room:${roomId}`, JSON.stringify(msg));
+    } catch (err) {
+      console.warn(`[Redis] Failed to publish chat message for ${roomId}:`, err);
     }
   }
 

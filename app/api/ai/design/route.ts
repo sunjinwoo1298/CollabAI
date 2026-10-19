@@ -6,6 +6,66 @@ import { getProjectAccess } from "@/lib/project-access";
 import type { designAgentTask } from "@/trigger/design-agent";
 
 /**
+ * GET /api/ai/design?projectId=...
+ * Retrieves the latest active or recent TaskRun for the authenticated user and project.
+ * Supports restoring active run state across component remounts and page reloads.
+ */
+export async function GET(req: NextRequest) {
+  const { userId } = await auth();
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { searchParams } = new URL(req.url);
+  const projectId = searchParams.get("projectId")?.trim();
+
+  if (!projectId) {
+    return NextResponse.json(
+      { error: "projectId query parameter is required" },
+      { status: 400 }
+    );
+  }
+
+  try {
+    const access = await getProjectAccess(projectId);
+    if (!access.authenticated) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (!access.project) {
+      return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    }
+    if (!access.hasAccess) {
+      return NextResponse.json(
+        { error: "Forbidden: You do not have access to this project" },
+        { status: 403 }
+      );
+    }
+
+    // Look up latest TaskRun within the last 15 minutes for this user and project
+    const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
+    const taskRun = await prisma.taskRun.findFirst({
+      where: {
+        projectId,
+        userId,
+        createdAt: { gte: fifteenMinutesAgo },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    return NextResponse.json({
+      runId: taskRun?.runId ?? null,
+      projectId,
+    });
+  } catch (error) {
+    console.error("Error retrieving active design task run:", error);
+    return NextResponse.json(
+      { error: "Failed to retrieve active design run" },
+      { status: 500 }
+    );
+  }
+}
+
+/**
  * POST /api/ai/design
  * Triggers the Trigger.dev design task, stores the TaskRun tracking record in Prisma,
  * and returns the run ID to the client.

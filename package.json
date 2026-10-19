@@ -16,7 +16,9 @@
     "test:design-api": "tsx test/design-agent-api.test.ts",
     "test:design-logic": "tsx test/design-agent-logic.test.ts",
     "test:presence-state": "tsx test/ai-presence-state.test.ts",
-    "test": "tsx test/canvas-sync.test.ts && tsx test/starter-templates.test.ts && tsx test/presence-avatars-cursors.test.ts && tsx test/ai-sidebar.test.ts && tsx test/ai-presence-state.test.ts && tsx test/canvas-autosave.test.ts && tsx test/design-agent-api.test.ts && tsx test/design-agent-logic.test.ts",
+    "test:chat": "tsx test/sidebar-chat-feed.test.ts",
+    "test:ai-chat": "tsx test/ai-chat-functional.test.ts",
+    "test": "tsx test/canvas-sync.test.ts && tsx test/starter-templates.test.ts && tsx test/presence-avatars-cursors.test.ts && tsx test/ai-sidebar.test.ts && tsx test/ai-presence-state.test.ts && tsx test/canvas-autosave.test.ts && tsx test/design-agent-api.test.ts && tsx test/design-agent-logic.test.ts && tsx test/sidebar-chat-feed.test.ts && tsx test/ai-chat-functional.test.ts",
     "trigger:dev": "trigger.dev dev",
     "lint": "eslint"
   },

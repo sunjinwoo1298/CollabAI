@@ -52,6 +52,7 @@ interface CollaborativeCanvasProps {
   onCollaboratorsChange?: (collaborators: RemoteCollaborator[]) => void;
   onSaveStatusChange?: (status: SaveStatus, saveNow: () => Promise<boolean>) => void;
   isAutosaveEnabled?: boolean;
+  onProviderReady?: (provider: any) => void;
 }
 
 const nodeTypes = {
@@ -124,6 +125,7 @@ function CollaborativeCanvasInner({
   onCollaboratorsChange,
   onSaveStatusChange,
   isAutosaveEnabled = true,
+  onProviderReady,
 }: CollaborativeCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
@@ -165,6 +167,10 @@ function CollaborativeCanvasInner({
     reconnect,
     updatePresence,
   } = useYjsRoom(projectId);
+
+  useEffect(() => {
+    onProviderReady?.(provider);
+  }, [provider, onProviderReady]);
 
   // 2. Initial Canvas Restoration Lifecycle (Empty room fallback from Vercel Blob)
   const hasCheckedRestoreRef = useRef(false);

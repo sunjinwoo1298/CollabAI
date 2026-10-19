@@ -4,7 +4,14 @@ import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import * as Y from "yjs";
 import { WebsocketProvider } from "y-websocket";
 import { Awareness } from "y-protocols/awareness";
-import { UserPresence, WsAuthResponse } from "@/types/collaboration";
+import * as decoding from "lib0/decoding";
+import * as encoding from "lib0/encoding";
+import {
+  UserPresence,
+  WsAuthResponse,
+  WS_MESSAGE_CHAT,
+  validateRoomChatMessage,
+} from "@/types/collaboration";
 
 export type ConnectionState =
   | "idle"
@@ -113,6 +120,24 @@ export function useYjsRoom(projectId: string | null | undefined): UseYjsRoomResu
         params: { token },
         connect: true,
       });
+
+      // Register room chat message handler on the WebsocketProvider
+      wsProvider.messageHandlers[WS_MESSAGE_CHAT] = (
+        _encoder: encoding.Encoder,
+        decoder: decoding.Decoder,
+        p: WebsocketProvider
+      ) => {
+        try {
+          const raw = decoding.readVarString(decoder);
+          const parsed = JSON.parse(raw);
+          const validation = validateRoomChatMessage(parsed);
+          if (validation.valid && validation.message) {
+            (p as any).emit("chat-message", [validation.message]);
+          }
+        } catch (err) {
+          console.warn("[useYjsRoom] Failed to handle incoming chat message:", err);
+        }
+      };
 
       providerRef.current = wsProvider;
       if (isMountedRef.current) {

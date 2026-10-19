@@ -13,6 +13,7 @@ import { CollaborativeCanvas } from "@/components/canvas/collaborative-canvas";
 import { Project } from "@/types/project";
 import { RemoteCollaborator } from "@/types/canvas";
 import { SaveStatus } from "@/hooks/useCanvasAutosave";
+import type { WebsocketProvider } from "y-websocket";
 
 interface WorkspaceShellProps {
   project: {
@@ -36,6 +37,7 @@ export function WorkspaceShell({
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [isTemplatesOpen, setIsTemplatesOpen] = useState(false);
   const [collaborators, setCollaborators] = useState<RemoteCollaborator[]>([]);
+  const [provider, setProvider] = useState<WebsocketProvider | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [isAutosaveEnabled, setIsAutosaveEnabled] = useState(true);
   const saveNowRef = useRef<(() => Promise<boolean>) | null>(null);
@@ -112,6 +114,7 @@ export function WorkspaceShell({
             onCollaboratorsChange={setCollaborators}
             onSaveStatusChange={handleSaveStatusChange}
             isAutosaveEnabled={isAutosaveEnabled}
+            onProviderReady={setProvider}
           />
         </main>
 
@@ -133,6 +136,7 @@ export function WorkspaceShell({
           onClose={() => setIsAiSidebarOpen(false)}
           projectId={project.id}
           collaborators={collaborators}
+          provider={provider}
         />
       </div>
 

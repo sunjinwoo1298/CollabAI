@@ -4,13 +4,26 @@ import * as awarenessProtocol from "y-protocols/awareness";
 import * as encoding from "lib0/encoding";
 import * as decoding from "lib0/decoding";
 import { WebSocket } from "ws";
-import { WsAuthTokenPayload } from "../../types/collaboration";
+import crypto from "crypto";
+import {
+  WsAuthTokenPayload,
+  RoomChatMessage,
+  validateRoomChatMessage,
+  validateSendChatInput,
+  WS_MESSAGE_SYNC,
+  WS_MESSAGE_AWARENESS,
+  WS_MESSAGE_AUTH,
+  WS_MESSAGE_QUERY_AWARENESS,
+  WS_MESSAGE_CHAT,
+} from "../../types/collaboration";
 import { redisManager } from "./redis";
+import { prisma } from "../../lib/prisma";
 
-export const MESSAGE_SYNC = 0;
-export const MESSAGE_AWARENESS = 1;
-export const MESSAGE_AUTH = 2;
-export const MESSAGE_QUERY_AWARENESS = 3;
+export const MESSAGE_SYNC = WS_MESSAGE_SYNC;
+export const MESSAGE_AWARENESS = WS_MESSAGE_AWARENESS;
+export const MESSAGE_AUTH = WS_MESSAGE_AUTH;
+export const MESSAGE_QUERY_AWARENESS = WS_MESSAGE_QUERY_AWARENESS;
+export const MESSAGE_CHAT = WS_MESSAGE_CHAT;
 
 function send(conn: WebSocket, message: Uint8Array) {
   if (conn.readyState !== WebSocket.OPEN) return;
@@ -30,6 +43,7 @@ export class CollaborativeRoom {
   public readonly doc: Y.Doc;
   public readonly awareness: awarenessProtocol.Awareness;
   public readonly conns: Map<WebSocket, Set<number>> = new Map();
+  public readonly connMeta: Map<WebSocket, WsAuthTokenPayload> = new Map();
   private cleanupTimer: NodeJS.Timeout | null = null;
   private onDestroyCallback?: (roomId: string) => void;
 
@@ -82,6 +96,16 @@ export class CollaborativeRoom {
           );
         } catch (err) {
           console.error(`[Room ${this.roomId}] Error applying remote awareness:`, err);
+        }
+      },
+      (chatMessage) => {
+        // Validate and broadcast cross-instance chat message received via Redis
+        const valid = validateRoomChatMessage(chatMessage);
+        if (valid.valid && valid.message && valid.message.projectId === this.roomId) {
+          const encoder = encoding.createEncoder();
+          encoding.writeVarUint(encoder, MESSAGE_CHAT);
+          encoding.writeVarString(encoder, JSON.stringify(valid.message));
+          this.broadcast(encoding.toUint8Array(encoder));
         }
       }
     );
@@ -145,6 +169,7 @@ export class CollaborativeRoom {
 
     const clientSet = new Set<number>();
     this.conns.set(conn, clientSet);
+    this.connMeta.set(conn, payload);
 
     // 1. Send SyncStep1 to newly connected client to start CRDT handshake
     const syncEncoder = encoding.createEncoder();
@@ -197,6 +222,78 @@ export class CollaborativeRoom {
           send(conn, encoding.toUint8Array(encoder));
           break;
         }
+        case MESSAGE_CHAT: {
+          const payload = this.connMeta.get(conn);
+          if (!payload) {
+            console.warn(`[Room ${this.roomId}] Unauthenticated chat message rejected`);
+            break;
+          }
+
+          let parsed: any;
+          try {
+            const raw = decoding.readVarString(decoder);
+            parsed = JSON.parse(raw);
+          } catch {
+            console.warn(`[Room ${this.roomId}] Malformed chat payload`);
+            break;
+          }
+
+          const inputValidation = validateSendChatInput(parsed);
+          if (!inputValidation.valid || !inputValidation.input) {
+            console.warn(`[Room ${this.roomId}] Invalid chat input: ${inputValidation.error}`);
+            break;
+          }
+
+          // Strict server authority: client cannot override senderId, role, sender, timestamp, or projectId
+          const messageId =
+            typeof parsed.id === "string" && parsed.id.trim()
+              ? parsed.id.trim()
+              : `msg_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
+
+          const chatMessage: RoomChatMessage = {
+            id: messageId,
+            projectId: this.roomId,
+            senderId: payload.userMeta.userId || payload.sub,
+            sender: payload.userMeta.name || "Anonymous User",
+            role: "user",
+            content: inputValidation.input.content,
+            timestamp: new Date().toISOString(),
+          };
+
+          const validation = validateRoomChatMessage(chatMessage);
+          if (!validation.valid || !validation.message) {
+            console.warn(`[Room ${this.roomId}] Constructed message failed validation: ${validation.error}`);
+            break;
+          }
+
+          // 1. Broadcast to all clients in the room
+          const encoder = encoding.createEncoder();
+          encoding.writeVarUint(encoder, MESSAGE_CHAT);
+          encoding.writeVarString(encoder, JSON.stringify(validation.message));
+          this.broadcast(encoding.toUint8Array(encoder));
+
+          // 2. Publish to Redis for multi-instance fan-out
+          redisManager.publishChatMessage(this.roomId, validation.message);
+
+          // 3. Asynchronously persist to PostgreSQL via Prisma
+          prisma.chatMessage
+            .create({
+              data: {
+                id: validation.message.id,
+                projectId: validation.message.projectId,
+                senderId: validation.message.senderId,
+                sender: validation.message.sender,
+                role: validation.message.role,
+                content: validation.message.content,
+                createdAt: new Date(validation.message.timestamp),
+              },
+            })
+            .catch((err) => {
+              console.warn(`[Room ${this.roomId}] Failed to persist chat message:`, err.message);
+            });
+
+          break;
+        }
         default:
           console.warn(`[Room ${this.roomId}] Unknown message type: ${messageType}`);
       }
@@ -216,6 +313,7 @@ export class CollaborativeRoom {
     }
 
     this.conns.delete(conn);
+    this.connMeta.delete(conn);
 
     // If no clients left in the room, schedule cleanup after 30 seconds
     if (this.conns.size === 0) {
