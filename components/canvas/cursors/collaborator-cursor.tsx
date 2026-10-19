@@ -2,22 +2,39 @@
 
 import React, { memo } from "react";
 import { ViewportPortal } from "@xyflow/react";
-import { Sparkles } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { RemoteCollaborator } from "@/types/canvas";
 
-interface CollaboratorCursorProps {
+export interface CollaboratorCursorProps {
   collaborator: RemoteCollaborator;
+}
+
+/**
+ * Checks whether a collaborator has an active thinking state.
+ * Strictly matches thinking === true.
+ * Returns false when the value is false, missing (unless legacy isThinking === true), or invalid.
+ */
+export function isParticipantThinking(collaborator: {
+  thinking?: unknown;
+  isThinking?: unknown;
+}): boolean {
+  if (collaborator.thinking !== undefined) {
+    return collaborator.thinking === true;
+  }
+  return collaborator.isThinking === true;
 }
 
 export const CollaboratorCursor = memo(function CollaboratorCursor({
   collaborator,
 }: CollaboratorCursorProps) {
-  const { user, cursor, isThinking } = collaborator;
+  const { user, cursor } = collaborator;
 
   if (!cursor) return null;
 
   const userColor = user?.color || "#10B981";
   const userName = user?.name || "Collaborator";
+  const showSpinner = isParticipantThinking(collaborator);
+  const statusText = collaborator.text || collaborator.statusMessage || "Thinking...";
 
   return (
     <div
@@ -61,10 +78,16 @@ export const CollaboratorCursor = memo(function CollaboratorCursor({
 
         <span className="font-semibold tracking-tight">{userName}</span>
 
-        {isThinking && (
-          <span className="flex items-center gap-1 bg-black/30 px-1.5 py-0.5 rounded-full text-[9px]">
-            <Sparkles className="h-2.5 w-2.5 animate-spin text-amber-300" />
-            <span className="animate-pulse">Thinking...</span>
+        {showSpinner && (
+          <span
+            data-testid="cursor-thinking-badge"
+            className="flex items-center gap-1 bg-black/30 px-1.5 py-0.5 rounded-full text-[9px]"
+          >
+            <Loader2
+              data-testid="cursor-thinking-spinner"
+              className="h-2.5 w-2.5 animate-spin text-white"
+            />
+            <span className="animate-pulse">{statusText}</span>
           </span>
         )}
       </div>

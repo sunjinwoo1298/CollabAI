@@ -99,11 +99,25 @@ export function useCanvasSync({
           state?.user &&
           (!currentUserId || state.user.userId !== currentUserId)
         ) {
+          const thinkingVal = state.presence?.thinking;
+          const isThinkingVal = state.presence?.isThinking;
+          const isThinking =
+            typeof thinkingVal !== "undefined"
+              ? thinkingVal === true
+              : Boolean(isThinkingVal);
+
           peerList.push({
             clientId: client,
             user: state.user,
             cursor: state.presence?.cursor || null,
-            isThinking: Boolean(state.presence?.isThinking),
+            isThinking,
+            thinking: thinkingVal !== undefined ? thinkingVal : isThinkingVal,
+            statusMessage: state.presence?.text || state.presence?.statusMessage,
+            text: state.presence?.text || state.presence?.statusMessage,
+            runId: state.presence?.runId,
+            projectId: state.presence?.projectId,
+            status: state.presence?.status,
+            timestamp: state.presence?.timestamp,
           });
         }
       });

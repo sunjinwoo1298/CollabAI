@@ -12,11 +12,19 @@ import {
   ArrowRight,
   Clock,
   Layers,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import { RemoteCollaborator } from "@/types/canvas";
+import {
+  TaskStatusPayload,
+  AiActivityState,
+  createInitialAiActivityState,
+  applyAiStatusUpdate,
+} from "@/types/tasks";
 
 export interface ChatMessage {
   id: string;
@@ -31,17 +39,90 @@ export const STARTER_PROMPTS = [
   "Build a CI/CD pipeline",
 ] as const;
 
-interface AiSidebarProps {
+export interface AiSidebarProps {
   isOpen: boolean;
   onClose: () => void;
+  projectId?: string;
+  collaborators?: RemoteCollaborator[];
+  activeRunId?: string | null;
+  onStatusChange?: (status: TaskStatusPayload | null) => void;
 }
 
-export function AiSidebar({ isOpen, onClose }: AiSidebarProps) {
+export function AiSidebar({
+  isOpen,
+  onClose,
+  projectId,
+  collaborators = [],
+  activeRunId: propActiveRunId,
+  onStatusChange,
+}: AiSidebarProps) {
   const [activeTab, setActiveTab] = useState<string>("architect");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [activityState, setActivityState] = useState<AiActivityState>(() => {
+    const initial = createInitialAiActivityState();
+    if (propActiveRunId) {
+      initial.activeRunId = propActiveRunId;
+      initial.isGenerating = true;
+    }
+    return initial;
+  });
+
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  // Synchronize AI activity state from real-time collaborator awareness
+  useEffect(() => {
+    if (!collaborators || collaborators.length === 0) return;
+
+    // Scan collaborators for AI agent peer or peer with active AI state
+    const aiPeer = collaborators.find(
+      (c) => c.user?.userId === "ai-agent" || Boolean(c.runId)
+    );
+
+    if (aiPeer) {
+      const candidatePayload: TaskStatusPayload = {
+        runId: aiPeer.runId || "",
+        projectId: aiPeer.projectId || projectId || "",
+        thinking: aiPeer.thinking,
+        isThinking: aiPeer.isThinking,
+        text: aiPeer.text || aiPeer.statusMessage,
+        statusMessage: aiPeer.statusMessage || aiPeer.text,
+        status: aiPeer.status,
+        timestamp: aiPeer.timestamp,
+      };
+
+      setActivityState((prev) => {
+        const { nextState, accepted } = applyAiStatusUpdate(
+          prev,
+          candidatePayload,
+          projectId
+        );
+        return accepted ? nextState : prev;
+      });
+    } else {
+      // If no AI peer is present and we were generating, clear if local submission has ended
+      if (activityState.isGenerating && !isSubmitting) {
+        setActivityState((prev) => ({
+          ...prev,
+          isGenerating: false,
+          activeRunId: null,
+        }));
+      }
+    }
+  }, [collaborators, projectId, activityState.isGenerating, isSubmitting]);
+
+  // Notify parent of status changes if requested
+  useEffect(() => {
+    onStatusChange?.(activityState.status);
+  }, [activityState.status, onStatusChange]);
+
+  const isGenerationActive = isSubmitting || activityState.isGenerating;
+  const latestStatusText =
+    activityState.status?.text ||
+    activityState.status?.statusMessage ||
+    (isSubmitting ? "AI is starting..." : "");
 
   useEffect(() => {
     if (messagesEndRef.current) {
@@ -61,9 +142,9 @@ export function AiSidebar({ isOpen, onClose }: AiSidebarProps) {
     adjustTextareaHeight(e.target);
   };
 
-  const handleSendMessage = (textToSend?: string) => {
+  const handleSendMessage = async (textToSend?: string) => {
     const text = (textToSend ?? inputValue).trim();
-    if (!text) return;
+    if (!text || isGenerationActive) return;
 
     const userMessage: ChatMessage = {
       id: `user-${Date.now()}`,
@@ -82,19 +163,117 @@ export function AiSidebar({ isOpen, onClose }: AiSidebarProps) {
       textareaRef.current.style.height = "72px";
     }
 
-    // Interactive assistant response placeholder for UI feedback
-    setTimeout(() => {
-      const assistantMessage: ChatMessage = {
-        id: `assistant-${Date.now()}`,
-        sender: "assistant",
-        content: `I analyzed your architecture query: "${text}". The AI design engine will generate topology nodes and spec documents based on your canvas layout.`,
-        timestamp: new Date().toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
+    if (!projectId) {
+      // Interactive assistant response placeholder for UI feedback (test/offline mode)
+      setTimeout(() => {
+        const assistantMessage: ChatMessage = {
+          id: `assistant-${Date.now()}`,
+          sender: "assistant",
+          content: `I analyzed your architecture query: "${text}". The AI design engine will generate topology nodes and spec documents based on your canvas layout.`,
+          timestamp: new Date().toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+        };
+        setMessages((prev) => [...prev, assistantMessage]);
+      }, 400);
+      return;
+    }
+
+    setIsSubmitting(true);
+    const assistantMsgId = `assistant-${Date.now()}`;
+    const initialAssistantMessage: ChatMessage = {
+      id: assistantMsgId,
+      sender: "assistant",
+      content: `AI is starting... Analyzing request for project ${projectId}.`,
+      timestamp: new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    };
+    setMessages((prev) => [...prev, initialAssistantMessage]);
+
+    // Update initial status
+    setActivityState((prev) => ({
+      ...prev,
+      isGenerating: true,
+      lastTimestamp: Date.now(),
+      status: {
+        runId: `pending-${Date.now()}`,
+        projectId,
+        thinking: true,
+        isThinking: true,
+        text: "Analyzing your request...",
+        statusMessage: "Analyzing your request...",
+        status: "starting",
+        timestamp: Date.now(),
+      },
+    }));
+
+    try {
+      const res = await fetch("/api/ai/design", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: text,
+          projectId,
+          roomId: projectId,
         }),
-      };
-      setMessages((prev) => [...prev, assistantMessage]);
-    }, 400);
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Request failed with status ${res.status}`);
+      }
+
+      const data = await res.json();
+      const runId = data.runId;
+
+      setActivityState((prev) => ({
+        ...prev,
+        activeRunId: runId,
+        status: prev.status
+          ? { ...prev.status, runId }
+          : {
+              runId,
+              projectId,
+              thinking: true,
+              isThinking: true,
+              text: "Planning architecture changes...",
+              status: "planning",
+              timestamp: Date.now(),
+            },
+      }));
+
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === assistantMsgId
+            ? {
+                ...msg,
+                content: `Planning and applying architecture changes (Run: ${runId}). Canvas nodes and edges will update in real time.`,
+              }
+            : msg
+        )
+      );
+    } catch (err: any) {
+      setActivityState((prev) => ({
+        ...prev,
+        isGenerating: false,
+        activeRunId: null,
+      }));
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === assistantMsgId
+            ? {
+                ...msg,
+                content: `Design generation failed: ${err.message || "Unknown error"}`,
+              }
+            : msg
+        )
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -262,14 +441,36 @@ export function AiSidebar({ isOpen, onClose }: AiSidebarProps) {
 
           {/* Input Area */}
           <div className="p-3 border-t border-default bg-base/80 backdrop-blur-md shrink-0 space-y-2">
+            {/* Small status indicator and latest relevant shared AI status message */}
+            {isGenerationActive && latestStatusText && (
+              <div
+                data-testid="ai-status-indicator"
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-ai/10 border border-ai/20 text-xs text-ai animate-in fade-in duration-150"
+              >
+                <Loader2
+                  data-testid="ai-status-spinner"
+                  className="h-3 w-3 animate-spin shrink-0 text-ai"
+                />
+                <span className="truncate font-medium">{latestStatusText}</span>
+              </div>
+            )}
+
             <div className="relative rounded-xl border border-default bg-subtle focus-within:border-ai/60 focus-within:ring-1 focus-within:ring-ai/60 transition-all shadow-sm">
               <Textarea
                 ref={textareaRef}
                 value={inputValue}
                 onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask Collab AI to design or modify architecture... (Enter to send)"
-                className="min-h-[72px] max-h-[160px] resize-none border-0 bg-transparent px-3 py-2.5 text-xs text-primary placeholder:text-muted focus-visible:ring-0 focus-visible:outline-none"
+                disabled={isGenerationActive}
+                placeholder={
+                  isGenerationActive
+                    ? "AI generation is in progress..."
+                    : "Ask Collab AI to design or modify architecture... (Enter to send)"
+                }
+                className={cn(
+                  "min-h-[72px] max-h-[160px] resize-none border-0 bg-transparent px-3 py-2.5 text-xs text-primary placeholder:text-muted focus-visible:ring-0 focus-visible:outline-none",
+                  isGenerationActive && "opacity-50 cursor-not-allowed"
+                )}
               />
               <div className="flex items-center justify-between px-3 pb-2.5 pt-1">
                 <span className="text-[10px] text-muted font-mono">
@@ -279,11 +480,23 @@ export function AiSidebar({ isOpen, onClose }: AiSidebarProps) {
                   type="button"
                   size="sm"
                   onClick={() => handleSendMessage()}
-                  disabled={!inputValue.trim()}
+                  disabled={isGenerationActive || !inputValue.trim()}
                   className="h-7 px-2.5 text-xs font-medium rounded-lg bg-ai hover:bg-ai/90 text-white shadow-sm disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer inline-flex items-center gap-1.5"
                 >
-                  <Send className="h-3 w-3" />
-                  <span>Send</span>
+                  {isGenerationActive ? (
+                    <>
+                      <Loader2
+                        data-testid="send-loading-spinner"
+                        className="h-3 w-3 animate-spin"
+                      />
+                      <span>Generating...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-3 w-3" />
+                      <span>Send</span>
+                    </>
+                  )}
                 </Button>
               </div>
             </div>

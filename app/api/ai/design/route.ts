@@ -43,8 +43,16 @@ export async function POST(req: NextRequest) {
   const cleanPrompt = prompt.trim();
   const rawProjectId = typeof projectId === "string" ? projectId.trim() : "";
   const rawRoomId = typeof roomId === "string" ? roomId.trim() : "";
+
+  if (rawProjectId && rawRoomId && rawProjectId !== rawRoomId) {
+    return NextResponse.json(
+      { error: "Invariant violation: projectId must equal roomId" },
+      { status: 400 }
+    );
+  }
+
   const targetProjectId = rawProjectId || rawRoomId;
-  const targetRoomId = rawRoomId || rawProjectId;
+  const targetRoomId = targetProjectId;
 
   if (!targetProjectId) {
     return NextResponse.json(
@@ -77,6 +85,7 @@ export async function POST(req: NextRequest) {
       prompt: cleanPrompt,
       roomId: targetRoomId,
       projectId: targetProjectId,
+      userId,
     });
 
     const runId = handle.id;

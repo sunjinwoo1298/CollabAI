@@ -4,6 +4,13 @@ export interface UserPresence {
     y: number;
   } | null;
   isThinking?: boolean;
+  thinking?: boolean;
+  statusMessage?: string;
+  text?: string;
+  runId?: string;
+  projectId?: string;
+  status?: string;
+  timestamp?: number;
 }
 
 export interface UserMeta {
