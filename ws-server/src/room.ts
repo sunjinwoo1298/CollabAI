@@ -44,8 +44,21 @@ export class CollaborativeRoom {
   public readonly awareness: awarenessProtocol.Awareness;
   public readonly conns: Map<WebSocket, Set<number>> = new Map();
   public readonly connMeta: Map<WebSocket, WsAuthTokenPayload> = new Map();
+  private recentBroadcastIds = new Set<string>();
   private cleanupTimer: NodeJS.Timeout | null = null;
   private onDestroyCallback?: (roomId: string) => void;
+
+  private recordBroadcast(id: string) {
+    this.recentBroadcastIds.add(id);
+    if (this.recentBroadcastIds.size > 1000) {
+      const iter = this.recentBroadcastIds.values();
+      for (let i = 0; i < 500; i++) {
+        const next = iter.next();
+        if (next.done) break;
+        this.recentBroadcastIds.delete(next.value);
+      }
+    }
+  }
 
   constructor(roomId: string, onDestroy?: (roomId: string) => void) {
     this.roomId = roomId;
@@ -102,6 +115,11 @@ export class CollaborativeRoom {
         // Validate and broadcast cross-instance chat message received via Redis
         const valid = validateRoomChatMessage(chatMessage);
         if (valid.valid && valid.message && valid.message.projectId === this.roomId) {
+          if (this.recentBroadcastIds.has(valid.message.id)) {
+            return;
+          }
+          this.recordBroadcast(valid.message.id);
+
           const encoder = encoding.createEncoder();
           encoding.writeVarUint(encoder, MESSAGE_CHAT);
           encoding.writeVarString(encoder, JSON.stringify(valid.message));
@@ -191,7 +209,7 @@ export class CollaborativeRoom {
     }
   }
 
-  public handleMessage(conn: WebSocket, message: Uint8Array) {
+  public async handleMessage(conn: WebSocket, message: Uint8Array) {
     try {
       const decoder = decoding.createDecoder(message);
       const messageType = decoding.readVarUint(decoder);
@@ -250,6 +268,11 @@ export class CollaborativeRoom {
               ? parsed.id.trim()
               : `msg_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
 
+          // If this message was already broadcast (e.g. via Redis from HTTP POST), deduplicate
+          if (this.recentBroadcastIds.has(messageId)) {
+            break;
+          }
+
           const chatMessage: RoomChatMessage = {
             id: messageId,
             projectId: this.roomId,
@@ -266,19 +289,22 @@ export class CollaborativeRoom {
             break;
           }
 
-          // 1. Broadcast to all clients in the room
-          const encoder = encoding.createEncoder();
-          encoding.writeVarUint(encoder, MESSAGE_CHAT);
-          encoding.writeVarString(encoder, JSON.stringify(validation.message));
-          this.broadcast(encoding.toUint8Array(encoder));
+          // Persist durably in PostgreSQL BEFORE broadcasting to prevent ghost messages
+          try {
+            const existing = await prisma.chatMessage.findUnique({
+              where: { id: validation.message.id },
+            });
 
-          // 2. Publish to Redis for multi-instance fan-out
-          redisManager.publishChatMessage(this.roomId, validation.message);
+            if (existing) {
+              // Message was already persisted (e.g. via authoritative HTTP POST).
+              // Mark broadcast ID and suppress duplicate broadcast.
+              this.recordBroadcast(validation.message.id);
+              break;
+            }
 
-          // 3. Asynchronously persist to PostgreSQL via Prisma
-          prisma.chatMessage
-            .create({
-              data: {
+            await prisma.chatMessage.upsert({
+              where: { id: validation.message.id },
+              create: {
                 id: validation.message.id,
                 projectId: validation.message.projectId,
                 senderId: validation.message.senderId,
@@ -287,10 +313,25 @@ export class CollaborativeRoom {
                 content: validation.message.content,
                 createdAt: new Date(validation.message.timestamp),
               },
-            })
-            .catch((err) => {
-              console.warn(`[Room ${this.roomId}] Failed to persist chat message:`, err.message);
+              update: {},
             });
+
+            this.recordBroadcast(validation.message.id);
+
+            // 1. Broadcast to all clients in the room
+            const encoder = encoding.createEncoder();
+            encoding.writeVarUint(encoder, MESSAGE_CHAT);
+            encoding.writeVarString(encoder, JSON.stringify(validation.message));
+            this.broadcast(encoding.toUint8Array(encoder));
+
+            // 2. Publish to Redis for multi-instance fan-out
+            redisManager.publishChatMessage(this.roomId, validation.message);
+          } catch (persistErr: any) {
+            console.error(
+              `[Room ${this.roomId}] Chat persistence failed. Aborting broadcast to prevent ghost messages:`,
+              persistErr.message
+            );
+          }
 
           break;
         }

@@ -190,6 +190,14 @@ export function useRoomChat({
       try {
         // 1. Submit through authenticated Next.js API route for guaranteed persistence
         if (projectId) {
+          const clientMsgId = cleanRunId
+            ? `msg_ai_${cleanRunId}`
+            : `msg_${Date.now()}_${
+                typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+                  ? crypto.randomUUID().slice(0, 8)
+                  : Math.random().toString(36).slice(2, 10)
+              }`;
+
           const res = await fetch(
             `/api/projects/${encodeURIComponent(projectId)}/messages`,
             {
@@ -197,6 +205,7 @@ export function useRoomChat({
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 content: cleanContent,
+                id: clientMsgId,
                 runId: cleanRunId || undefined,
               }),
             }
@@ -213,10 +222,8 @@ export function useRoomChat({
             setMessages((prev) => mergeMessages(prev, valid.message!));
           }
 
-          // If provider is connected, also broadcast via WS as best-effort immediate relay
-          if (provider && provider.ws && provider.ws.readyState === WebSocket.OPEN) {
-            sendWsChatMessage(provider, cleanContent, confirmedMsg.id);
-          }
+          // Authoritative send path: HTTP POST persists and broadcasts via Redis.
+          // Redundant WebSocket resend is removed to eliminate duplicate broadcasts and P2002 collisions.
 
           return true;
         } else {

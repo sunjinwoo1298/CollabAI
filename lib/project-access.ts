@@ -5,6 +5,7 @@ export interface ClerkIdentity {
   userId: string;
   email: string | null;
   emails: string[];
+  name: string | null;
 }
 
 export interface ProjectAccessResult {
@@ -42,10 +43,17 @@ export async function getCurrentUserIdentity(): Promise<ClerkIdentity | null> {
         ?.map((e) => e.emailAddress.toLowerCase().trim())
         .filter(Boolean) || [];
 
+    const displayName =
+      user?.fullName ||
+      [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
+      primaryEmail?.split("@")[0] ||
+      null;
+
     return {
       userId,
       email: primaryEmail,
       emails,
+      name: displayName,
     };
   } catch (error) {
     console.error("Failed to get current user identity from Clerk:", error);
@@ -53,6 +61,7 @@ export async function getCurrentUserIdentity(): Promise<ClerkIdentity | null> {
       userId,
       email: null,
       emails: [],
+      name: null,
     };
   }
 }
