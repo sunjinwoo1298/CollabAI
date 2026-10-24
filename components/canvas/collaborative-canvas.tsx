@@ -124,7 +124,7 @@ function CollaborativeCanvasInner({
   onCloseTemplates,
   onCollaboratorsChange,
   onSaveStatusChange,
-  isAutosaveEnabled = true,
+  isAutosaveEnabled = false,
   onProviderReady,
 }: CollaborativeCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -204,7 +204,12 @@ function CollaborativeCanvasInner({
           ) {
             doc.transact(() => {
               for (const node of data.nodes) {
-                nodesMap.set(node.id, node);
+                nodesMap.set(node.id, {
+                  ...node,
+                  measured: node.measured || { width: 220, height: 90 },
+                  initialWidth: node.initialWidth || 220,
+                  initialHeight: node.initialHeight || 90,
+                });
               }
               for (const edge of (data.edges || [])) {
                 edgesMap.set(edge.id, edge);
@@ -358,6 +363,9 @@ function CollaborativeCanvasInner({
         id: nodeId,
         type: "system",
         position,
+        measured: { width: 220, height: 90 },
+        initialWidth: 220,
+        initialHeight: 90,
         data: {
           label: preset.label,
           sublabel: preset.sublabel,

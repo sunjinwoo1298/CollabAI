@@ -39,6 +39,16 @@ export interface UseCanvasSyncResult {
   setEdges: React.Dispatch<React.SetStateAction<CanvasEdge[]>>;
 }
 
+const DEFAULT_NODE_DIMENSIONS = { width: 220, height: 90 };
+
+const ensureNodeMeasured = (node: CanvasNode, existing?: CanvasNode): CanvasNode => ({
+  ...node,
+  measured: existing?.measured ?? node.measured ?? DEFAULT_NODE_DIMENSIONS,
+  initialWidth: existing?.initialWidth ?? node.initialWidth ?? DEFAULT_NODE_DIMENSIONS.width,
+  initialHeight: existing?.initialHeight ?? node.initialHeight ?? DEFAULT_NODE_DIMENSIONS.height,
+  selected: existing?.selected ?? node.selected ?? false,
+});
+
 export function useCanvasSync({
   doc,
   nodesMap,
@@ -48,7 +58,7 @@ export function useCanvasSync({
   updatePresence,
 }: UseCanvasSyncOptions): UseCanvasSyncResult {
   const [nodes, setNodes] = useState<CanvasNode[]>(() => {
-    return Array.from(nodesMap.values()) as CanvasNode[];
+    return (Array.from(nodesMap.values()) as CanvasNode[]).map((n) => ensureNodeMeasured(n));
   });
   const [edges, setEdges] = useState<CanvasEdge[]>(() => {
     return Array.from(edgesMap.values()) as CanvasEdge[];
@@ -59,18 +69,48 @@ export function useCanvasSync({
 
   // 1. Synchronize Yjs maps -> React state
   useEffect(() => {
-    // Initial hydration from Y.Doc
-    const currentNodes = Array.from(nodesMap.values()) as CanvasNode[];
+    // Initial hydration from Y.Doc with measured safety
+    const currentNodes = (Array.from(nodesMap.values()) as CanvasNode[]).map((n) =>
+      ensureNodeMeasured(n)
+    );
     const currentEdges = Array.from(edgesMap.values()) as CanvasEdge[];
-    setNodes(currentNodes);
+
+    setNodes((prevNodes) => {
+      if (prevNodes.length === 0 && currentNodes.length === 0) return prevNodes;
+      const prevMap = new Map(prevNodes.map((n) => [n.id, n]));
+      return currentNodes.map((n) => ensureNodeMeasured(n, prevMap.get(n.id)));
+    });
     setEdges(currentEdges);
 
-    const handleNodesChange = () => {
-      const nextNodes = Array.from(nodesMap.values()) as CanvasNode[];
-      setNodes(nextNodes);
+    const handleNodesChange = (_event: Y.YMapEvent<any>, transaction: Y.Transaction) => {
+      // Ignore local optimistic operations to avoid clobbering React Flow's internal measurements during drag
+      if (
+        transaction?.origin === "local-ui-nodes" ||
+        transaction?.origin === "local-add-node" ||
+        transaction?.origin === "local-delete-node" ||
+        transaction?.origin === "local-update-node-data" ||
+        transaction?.origin === "local-clear-canvas" ||
+        transaction?.origin === "local-load-template"
+      ) {
+        return;
+      }
+
+      setNodes((prevNodes) => {
+        const prevMap = new Map(prevNodes.map((n) => [n.id, n]));
+        const nextNodes = Array.from(nodesMap.values()) as CanvasNode[];
+        return nextNodes.map((n) => ensureNodeMeasured(n, prevMap.get(n.id)));
+      });
     };
 
-    const handleEdgesChange = () => {
+    const handleEdgesChange = (_event: Y.YMapEvent<any>, transaction: Y.Transaction) => {
+      if (
+        transaction?.origin === "local-ui-edges" ||
+        transaction?.origin === "local-edge-connect" ||
+        transaction?.origin === "local-clear-canvas" ||
+        transaction?.origin === "local-load-template"
+      ) {
+        return;
+      }
       const nextEdges = Array.from(edgesMap.values()) as CanvasEdge[];
       setEdges(nextEdges);
     };
@@ -156,6 +196,9 @@ export function useCanvasSync({
                 nodesMap.set(change.id, {
                   ...existingNode,
                   position: change.position,
+                  measured: existingNode.measured || DEFAULT_NODE_DIMENSIONS,
+                  initialWidth: existingNode.initialWidth || DEFAULT_NODE_DIMENSIONS.width,
+                  initialHeight: existingNode.initialHeight || DEFAULT_NODE_DIMENSIONS.height,
                 });
               }
             } else if (change.type === "remove") {
@@ -220,6 +263,9 @@ export function useCanvasSync({
         style: { stroke: "#64748B", strokeWidth: 2 },
       };
 
+      // Optimistically add edge to local state
+      setEdges((eds) => [...eds, newEdge]);
+
       isLocalTransactionRef.current = true;
       try {
         doc.transact(() => {
@@ -235,10 +281,15 @@ export function useCanvasSync({
   // 6. Explicit programmatic helper actions
   const addNode = useCallback(
     (node: CanvasNode) => {
+      const nodeWithMeasured = ensureNodeMeasured(node);
+
+      // Optimistically add node to local state with verified measurements
+      setNodes((nds) => [...nds, nodeWithMeasured]);
+
       isLocalTransactionRef.current = true;
       try {
         doc.transact(() => {
-          nodesMap.set(node.id, node);
+          nodesMap.set(node.id, nodeWithMeasured);
         }, "local-add-node");
       } finally {
         isLocalTransactionRef.current = false;
@@ -249,6 +300,9 @@ export function useCanvasSync({
 
   const deleteNode = useCallback(
     (nodeId: string) => {
+      setNodes((nds) => nds.filter((n) => n.id !== nodeId));
+      setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
+
       isLocalTransactionRef.current = true;
       try {
         doc.transact(() => {
@@ -268,6 +322,14 @@ export function useCanvasSync({
 
   const updateNodeData = useCallback(
     (nodeId: string, data: Partial<SystemNodeData>) => {
+      setNodes((nds) =>
+        nds.map((n) =>
+          n.id === nodeId
+            ? { ...n, data: { ...n.data, ...data } }
+            : n
+        )
+      );
+
       isLocalTransactionRef.current = true;
       try {
         doc.transact(() => {
@@ -290,6 +352,9 @@ export function useCanvasSync({
   );
 
   const clearCanvas = useCallback(() => {
+    setNodes([]);
+    setEdges([]);
+
     isLocalTransactionRef.current = true;
     try {
       doc.transact(() => {
@@ -307,6 +372,11 @@ export function useCanvasSync({
 
   const loadTemplate = useCallback(
     (template: CanvasTemplate) => {
+      const templateNodesWithMeasured = template.nodes.map((n) => ensureNodeMeasured(n));
+
+      setNodes(templateNodesWithMeasured);
+      setEdges(template.edges);
+
       isLocalTransactionRef.current = true;
       try {
         doc.transact(() => {
@@ -319,7 +389,7 @@ export function useCanvasSync({
           }
 
           // 2. Add all template nodes and edges in the same transaction
-          for (const node of template.nodes) {
+          for (const node of templateNodesWithMeasured) {
             nodesMap.set(node.id, node);
           }
           for (const edge of template.edges) {

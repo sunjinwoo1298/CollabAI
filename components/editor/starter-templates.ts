@@ -36,6 +36,9 @@ export function createTemplateNode(
     id,
     type: "system",
     position: { x, y },
+    measured: { width: 220, height: 90 },
+    initialWidth: 220,
+    initialHeight: 90,
     data,
   };
 }

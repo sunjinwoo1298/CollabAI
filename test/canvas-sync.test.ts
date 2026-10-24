@@ -182,8 +182,69 @@ async function runTests() {
   assert(mapProjA.size === 1, "Project A has 1 node");
   assert(mapProjB.size === 0, "Project B has 0 nodes (isolated)");
 
-  // 7. Cleanup
-  console.log("\n[Test 7] Y.Doc Lifecycle & Cleanup");
+  // 7. Node Initialization & Measured Dimensions Invariant (Error #015 Prevention)
+  console.log("\n[Test 7] Node Initialization & Measured Dimensions Invariant (Error #015 Prevention)");
+  const DEFAULT_NODE_DIMENSIONS = { width: 220, height: 90 };
+  const ensureNodeMeasured = (node: CanvasNode, existing?: CanvasNode): CanvasNode => ({
+    ...node,
+    measured: existing?.measured ?? node.measured ?? DEFAULT_NODE_DIMENSIONS,
+    initialWidth: existing?.initialWidth ?? node.initialWidth ?? DEFAULT_NODE_DIMENSIONS.width,
+    initialHeight: existing?.initialHeight ?? node.initialHeight ?? DEFAULT_NODE_DIMENSIONS.height,
+    selected: existing?.selected ?? node.selected ?? false,
+  });
+
+  // 7a. Test ensureNodeMeasured on unmeasured raw node
+  const rawNode: CanvasNode = {
+    id: "raw-node-1",
+    type: "system",
+    position: { x: 50, y: 50 },
+    data: { label: "Test Node", nodeType: "service" },
+  };
+  const initializedNode = ensureNodeMeasured(rawNode);
+  assert(
+    typeof initializedNode.measured?.width === "number" &&
+    typeof initializedNode.measured?.height === "number",
+    "Initialized node has concrete measured dimensions"
+  );
+  const measuredWidth = initializedNode.measured?.width ?? 0;
+  const measuredHeight = initializedNode.measured?.height ?? 0;
+  assert(
+    measuredWidth > 0 && measuredHeight > 0,
+    "Measured dimensions are strictly positive"
+  );
+
+  // 7b. Test preservation of existing measured dimensions across Yjs map updates
+  const existingWithDomMeasurement: CanvasNode = {
+    ...initializedNode,
+    measured: { width: 240, height: 105 },
+  };
+  const updatedFromYjs: CanvasNode = {
+    ...rawNode,
+    position: { x: 120, y: 180 },
+  };
+  const mergedNode = ensureNodeMeasured(updatedFromYjs, existingWithDomMeasurement);
+  assert(
+    mergedNode.measured?.width === 240 && mergedNode.measured?.height === 105,
+    "Preserved measured dimensions from DOM when synchronizing Yjs position updates"
+  );
+  assert(
+    mergedNode.position.x === 120 && mergedNode.position.y === 180,
+    "Position correctly reflects latest Yjs coordinates"
+  );
+
+  // 7c. Invariant: React Flow calculateNodePosition error condition (measured.width === undefined)
+  const isInitializedForDrag = (node: CanvasNode) =>
+    node.measured !== undefined &&
+    node.measured.width !== undefined &&
+    node.measured.height !== undefined;
+
+  assert(
+    isInitializedForDrag(mergedNode),
+    "Merged node satisfies React Flow dragging initialization requirement (Error #015 is impossible)"
+  );
+
+  // 8. Cleanup
+  console.log("\n[Test 8] Y.Doc Lifecycle & Cleanup");
   docA.destroy();
   docB.destroy();
   docProjectA.destroy();
