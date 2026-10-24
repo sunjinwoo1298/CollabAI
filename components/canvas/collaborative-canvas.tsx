@@ -37,12 +37,14 @@ import { useCanvasSync } from "@/hooks/useCanvasSync";
 import { useCanvasAutosave, SaveStatus } from "@/hooks/useCanvasAutosave";
 import { SystemNode } from "@/components/canvas/nodes/system-node";
 import { CollaboratorCursors } from "@/components/canvas/cursors/collaborator-cursor";
-import { CanvasNode, CanvasNodeType, RemoteCollaborator } from "@/types/canvas";
+import { CanvasNode, CanvasEdge, CanvasNodeType, RemoteCollaborator } from "@/types/canvas";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { StarterTemplatesModal } from "@/components/editor/starter-templates-modal";
 import { CanvasTemplate } from "@/components/editor/starter-templates";
 import { RenderServerBanner } from "./render-server-banner";
+import { customEdgeTypes } from "./edges/custom-edge";
+import { CanvasEdgeProvider } from "@/context/canvas-edge-context";
 
 interface CollaborativeCanvasProps {
   projectId: string;
@@ -263,6 +265,7 @@ function CollaborativeCanvasInner({
     addNode,
     clearCanvas,
     loadTemplate,
+    updateEdgeLabel,
   } = useCanvasSync({
     doc,
     nodesMap,
@@ -271,6 +274,21 @@ function CollaborativeCanvasInner({
     currentUserId: clerkUser?.id,
     updatePresence,
   });
+
+  const [editingEdgeId, setEditingEdgeId] = useState<string | null>(null);
+
+  const edgeContextValue = useMemo(
+    () => ({
+      updateEdgeLabel,
+      editingEdgeId,
+      setEditingEdgeId,
+    }),
+    [updateEdgeLabel, editingEdgeId]
+  );
+
+  const handleEdgeDoubleClick = useCallback((_event: React.MouseEvent, edge: CanvasEdge) => {
+    setEditingEdgeId(edge.id);
+  }, []);
 
   // Notify parent component of collaborator state changes
   useEffect(() => {
@@ -498,31 +516,34 @@ function CollaborativeCanvasInner({
   }, [connectionState]);
 
   return (
-    <div
-      ref={containerRef}
-      className="absolute inset-0 w-full h-full bg-base overflow-hidden select-none"
-      onPointerMove={handlePointerMove}
-      onPointerLeave={handlePointerLeave}
-      onDragOver={handleDragOver}
-      onDrop={handleDrop}
-    >
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
-        nodeTypes={nodeTypes}
-        fitView
-        minZoom={0.2}
-        maxZoom={2.5}
-        defaultEdgeOptions={{
-          type: "smoothstep",
-          animated: true,
-          style: { stroke: "#64748B", strokeWidth: 2 },
-        }}
-      // proOptions={{ hideAttribution: true }}
+    <CanvasEdgeProvider value={edgeContextValue}>
+      <div
+        ref={containerRef}
+        className="absolute inset-0 w-full h-full bg-base overflow-hidden select-none"
+        onPointerMove={handlePointerMove}
+        onPointerLeave={handlePointerLeave}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
       >
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onConnect={onConnect}
+          onEdgeDoubleClick={handleEdgeDoubleClick}
+          nodeTypes={nodeTypes}
+          edgeTypes={customEdgeTypes}
+          fitView
+          minZoom={0.2}
+          maxZoom={2.5}
+          defaultEdgeOptions={{
+            type: "custom",
+            animated: true,
+            style: { stroke: "#64748B", strokeWidth: 2 },
+          }}
+        // proOptions={{ hideAttribution: true }}
+        >
         {/* Infinite Background Dot Grid */}
         <Background
           variant={BackgroundVariant.Dots}
@@ -796,7 +817,8 @@ function CollaborativeCanvasInner({
         onClose={handleCloseTemplates}
         onImport={handleImportTemplate}
       />
-    </div>
+      </div>
+    </CanvasEdgeProvider>
   );
 }
 

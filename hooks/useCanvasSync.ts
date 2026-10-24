@@ -33,6 +33,7 @@ export interface UseCanvasSyncResult {
   addNode: (node: CanvasNode) => void;
   deleteNode: (nodeId: string) => void;
   updateNodeData: (nodeId: string, data: Partial<SystemNodeData>) => void;
+  updateEdgeLabel: (edgeId: string, label: string) => void;
   clearCanvas: () => void;
   loadTemplate: (template: CanvasTemplate) => void;
   setNodes: React.Dispatch<React.SetStateAction<CanvasNode[]>>;
@@ -107,7 +108,8 @@ export function useCanvasSync({
         transaction?.origin === "local-ui-edges" ||
         transaction?.origin === "local-edge-connect" ||
         transaction?.origin === "local-clear-canvas" ||
-        transaction?.origin === "local-load-template"
+        transaction?.origin === "local-load-template" ||
+        transaction?.origin === "local-update-edge-label"
       ) {
         return;
       }
@@ -403,6 +405,33 @@ export function useCanvasSync({
     [doc, nodesMap, edgesMap]
   );
 
+  const updateEdgeLabel = useCallback(
+    (edgeId: string, label: string) => {
+      const trimmed = label.trim();
+      setEdges((eds) =>
+        eds.map((e) =>
+          e.id === edgeId ? { ...e, label: trimmed || undefined } : e
+        )
+      );
+
+      isLocalTransactionRef.current = true;
+      try {
+        doc.transact(() => {
+          const existing = edgesMap.get(edgeId) as CanvasEdge | undefined;
+          if (existing) {
+            edgesMap.set(edgeId, {
+              ...existing,
+              label: trimmed || undefined,
+            });
+          }
+        }, "local-update-edge-label");
+      } finally {
+        isLocalTransactionRef.current = false;
+      }
+    },
+    [doc, edgesMap]
+  );
+
   return {
     nodes,
     edges,
@@ -413,6 +442,7 @@ export function useCanvasSync({
     addNode,
     deleteNode,
     updateNodeData,
+    updateEdgeLabel,
     clearCanvas,
     loadTemplate,
     setNodes,
