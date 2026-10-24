@@ -27,6 +27,8 @@ export interface UseYjsRoomResult {
   awareness: Awareness | null;
   connectionState: ConnectionState;
   isSynced: boolean;
+  isServerWaking: boolean;
+  connectDuration: number;
   nodesMap: Y.Map<any>;
   edgesMap: Y.Map<any>;
   error: string | null;
@@ -45,32 +47,95 @@ export function useYjsRoom(projectId: string | null | undefined): UseYjsRoomResu
   const [connectionState, setConnectionState] = useState<ConnectionState>("idle");
   const [isSynced, setIsSynced] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [connectDuration, setConnectDuration] = useState(0);
+  const [isServerWaking, setIsServerWaking] = useState(false);
 
   const providerRef = useRef<WebsocketProvider | null>(null);
   const isMountedRef = useRef(true);
   const isConnectingRef = useRef(false);
   const isUnauthorizedRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const durationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Helper to cleanly destroy an existing provider without triggering recursive reconnect loops
   const destroyCurrentProvider = useCallback(() => {
-    if (!providerRef.current) return;
-    const oldProvider = providerRef.current;
-    providerRef.current = null;
-    if (isMountedRef.current) {
-      setIsSynced(false);
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
     }
 
-    try {
-      // Disconnect and destroy
-      oldProvider.destroy();
-    } catch (e) {
-      console.warn("[useYjsRoom] Error destroying provider:", e);
+    if (providerRef.current) {
+      const oldProvider = providerRef.current;
+      providerRef.current = null;
+      try {
+        oldProvider.awareness?.destroy();
+        oldProvider.disconnect();
+        oldProvider.destroy();
+      } catch (e) {
+        console.warn("[useYjsRoom] Error destroying provider:", e);
+      }
+    }
+
+    if (isMountedRef.current) {
+      setProvider(null);
+      setAwareness(null);
+      setIsSynced(false);
     }
   }, []);
 
+  // Timer to track connection duration (detects Render free-tier cold starts)
+  useEffect(() => {
+    if (connectionState === "connecting" || (connectionState === "disconnected" && !isUnauthorizedRef.current)) {
+      if (!durationTimerRef.current) {
+        durationTimerRef.current = setInterval(() => {
+          setConnectDuration((prev) => {
+            const next = prev + 1;
+            if (next >= 3) {
+              setIsServerWaking(true);
+            }
+            return next;
+          });
+        }, 1000);
+      }
+    } else {
+      if (durationTimerRef.current) {
+        clearInterval(durationTimerRef.current);
+        durationTimerRef.current = null;
+      }
+      if (connectionState === "connected") {
+        setIsServerWaking(false);
+        setConnectDuration(0);
+      }
+    }
+
+    return () => {
+      if (durationTimerRef.current) {
+        clearInterval(durationTimerRef.current);
+        durationTimerRef.current = null;
+      }
+    };
+  }, [connectionState]);
+
   // Authenticate and establish connection
   const connectRoom = useCallback(async () => {
-    if (!projectId || isUnauthorizedRef.current || isConnectingRef.current) return;
+    if (!projectId || isUnauthorizedRef.current) return;
+
+    // Strict guard: prevent overlapping concurrent connection attempts
+    if (isConnectingRef.current) {
+      return;
+    }
+
+    // Strict guard: if a provider already exists and is connected, don't spawn duplicate
+    if (providerRef.current?.wsconnected) {
+      return;
+    }
+
+    // Cancel any previous in-flight auth fetch
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
 
     isConnectingRef.current = true;
     if (isMountedRef.current) {
@@ -84,10 +149,10 @@ export function useYjsRoom(projectId: string | null | undefined): UseYjsRoomResu
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ projectId }),
+        signal: abortController.signal,
       });
 
-      if (!isMountedRef.current) {
-        isConnectingRef.current = false;
+      if (!isMountedRef.current || abortController.signal.aborted) {
         return;
       }
 
@@ -95,9 +160,9 @@ export function useYjsRoom(projectId: string | null | undefined): UseYjsRoomResu
       if (res.status === 401 || res.status === 403) {
         isUnauthorizedRef.current = true;
         setConnectionState("unauthorized");
+        setIsServerWaking(false);
         setError("Unauthorized access to this project room");
         destroyCurrentProvider();
-        isConnectingRef.current = false;
         return;
       }
 
@@ -106,8 +171,11 @@ export function useYjsRoom(projectId: string | null | undefined): UseYjsRoomResu
       }
 
       const data: WsAuthResponse = await res.json();
-      const { token, wsUrl } = data;
+      if (!isMountedRef.current || abortController.signal.aborted) {
+        return;
+      }
 
+      const { token, wsUrl } = data;
       if (!token) {
         throw new Error("No token returned by authorization endpoint");
       }
@@ -115,10 +183,26 @@ export function useYjsRoom(projectId: string | null | undefined): UseYjsRoomResu
       // Destroy previous provider if any before instantiating new one
       destroyCurrentProvider();
 
-      // 2. Create fresh WebsocketProvider with newly minted JWT token (Invariant 1: projectId === roomId)
+      // Proactively trigger Render container wake-up via standard HTTPS health probe
+      // (Render free tier wakes up reliably on incoming HTTP traffic)
+      try {
+        const httpHealthUrl = wsUrl
+          .replace(/^wss:\/\//i, "https://")
+          .replace(/^ws:\/\//i, "http://")
+          .replace(/\/+$/, "") + "/health";
+
+        fetch(httpHealthUrl, { mode: "no-cors", signal: AbortSignal.timeout(4000) }).catch(() => {
+          // Non-blocking ping
+        });
+      } catch {
+        // Ignore ping failures
+      }
+
+      // 2. Create exactly ONE fresh WebsocketProvider with newly minted JWT token (Invariant 1: projectId === roomId)
       const wsProvider = new WebsocketProvider(wsUrl, projectId, doc, {
         params: { token },
         connect: true,
+        maxBackoffTime: 5000, // Faster retry interval for waking Render instances
       });
 
       // Register room chat message handler on the WebsocketProvider
@@ -166,6 +250,7 @@ export function useYjsRoom(projectId: string | null | undefined): UseYjsRoomResu
 
         if (event.status === "connected") {
           setConnectionState("connected");
+          setIsServerWaking(false);
           setError(null);
         } else if (event.status === "connecting") {
           setConnectionState("connecting");
@@ -181,13 +266,14 @@ export function useYjsRoom(projectId: string | null | undefined): UseYjsRoomResu
       wsProvider.on("connection-close", (event: CloseEvent | null) => {
         if (!isMountedRef.current) return;
 
-        // CRITICAL FIX: If event is null, this is a local intentional disconnect/destroy -> DO NOT RECONNECT!
+        // If event is null, this is a local intentional disconnect/destroy -> DO NOT RECONNECT!
         if (event === null) return;
 
         // Code 4403 or 403 denotes forbidden
         if (event?.code === 4403 || event?.code === 403) {
           isUnauthorizedRef.current = true;
           setConnectionState("unauthorized");
+          setIsServerWaking(false);
           setIsSynced(false);
           setError("Session forbidden: access denied");
           wsProvider.disconnect();
@@ -201,7 +287,7 @@ export function useYjsRoom(projectId: string | null | undefined): UseYjsRoomResu
         }
       });
     } catch (err: any) {
-      if (!isMountedRef.current) return;
+      if (!isMountedRef.current || abortController.signal.aborted) return;
       console.error("[useYjsRoom] Connection error:", err);
       setError(err.message || "Failed to establish real-time collaboration");
       setConnectionState("error");
@@ -211,12 +297,13 @@ export function useYjsRoom(projectId: string | null | undefined): UseYjsRoomResu
     }
   }, [projectId, doc, destroyCurrentProvider]);
 
-  // Reconnect trigger
+  // Safe manual reconnect trigger (guards against duplicate calls)
   const reconnect = useCallback(() => {
+    if (isConnectingRef.current) return;
     isUnauthorizedRef.current = false;
-    isConnectingRef.current = false;
+    destroyCurrentProvider();
     connectRoom();
-  }, [connectRoom]);
+  }, [connectRoom, destroyCurrentProvider]);
 
   // Helper to update ephemeral cursor/presence
   const updatePresence = useCallback((partialPresence: Partial<UserPresence>) => {
@@ -228,7 +315,7 @@ export function useYjsRoom(projectId: string | null | undefined): UseYjsRoomResu
     });
   }, []);
 
-  // Main lifecycle effect
+  // Main lifecycle effect (cleanly bound to projectId and doc only)
   useEffect(() => {
     isMountedRef.current = true;
     isUnauthorizedRef.current = false;
@@ -240,6 +327,10 @@ export function useYjsRoom(projectId: string | null | undefined): UseYjsRoomResu
 
     return () => {
       isMountedRef.current = false;
+      if (durationTimerRef.current) {
+        clearInterval(durationTimerRef.current);
+        durationTimerRef.current = null;
+      }
       destroyCurrentProvider();
       doc.destroy();
     };
@@ -251,6 +342,8 @@ export function useYjsRoom(projectId: string | null | undefined): UseYjsRoomResu
     awareness,
     connectionState,
     isSynced,
+    isServerWaking,
+    connectDuration,
     nodesMap,
     edgesMap,
     error,

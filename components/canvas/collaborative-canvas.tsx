@@ -42,6 +42,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { StarterTemplatesModal } from "@/components/editor/starter-templates-modal";
 import { CanvasTemplate } from "@/components/editor/starter-templates";
+import { RenderServerBanner } from "./render-server-banner";
 
 interface CollaborativeCanvasProps {
   projectId: string;
@@ -161,6 +162,8 @@ function CollaborativeCanvasInner({
     awareness,
     connectionState,
     isSynced,
+    isServerWaking,
+    connectDuration,
     nodesMap,
     edgesMap,
     error: roomError,
@@ -672,6 +675,16 @@ function CollaborativeCanvasInner({
               )}
             </div>
           )}
+        </Panel>
+
+        {/* Top-Center Server Waking Banner (Render Free Tier Cold Start Indicator) */}
+        <Panel position="top-center" className="!m-4 !z-40">
+          <RenderServerBanner
+            connectionState={connectionState}
+            isServerWaking={isServerWaking}
+            connectDuration={connectDuration}
+            reconnect={reconnect}
+          />
         </Panel>
 
         {/* Top-Right Collaboration & Connection Status Panel */}
