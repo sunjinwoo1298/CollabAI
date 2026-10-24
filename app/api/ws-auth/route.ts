@@ -98,7 +98,12 @@ export async function POST(req: NextRequest) {
       userMeta,
     });
 
-    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:1234";
+    const rawWsUrl = (process.env.NEXT_PUBLIC_WS_URL || process.env.WS_URL || "ws://localhost:1234").trim();
+    const wsUrl = rawWsUrl.startsWith("https://")
+      ? rawWsUrl.replace(/^https:\/\//i, "wss://")
+      : rawWsUrl.startsWith("http://")
+      ? rawWsUrl.replace(/^http:\/\//i, "ws://")
+      : rawWsUrl;
 
     // 8. Return response
     return NextResponse.json({

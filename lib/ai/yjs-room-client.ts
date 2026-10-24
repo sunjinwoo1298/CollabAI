@@ -42,11 +42,18 @@ export class YjsRoomClient {
     this.projectId = options.projectId;
     this.roomId = options.roomId;
     this.runId = options.runId;
-    this.wsUrl =
+    const rawWsUrl = (
       options.wsUrl ||
       process.env.WS_URL ||
       process.env.NEXT_PUBLIC_WS_URL ||
-      "ws://localhost:1234";
+      "ws://localhost:1234"
+    ).trim();
+
+    this.wsUrl = rawWsUrl.startsWith("https://")
+      ? rawWsUrl.replace(/^https:\/\//i, "wss://")
+      : rawWsUrl.startsWith("http://")
+      ? rawWsUrl.replace(/^http:\/\//i, "ws://")
+      : rawWsUrl;
 
     this.doc = new Y.Doc();
     this.nodesMap = this.doc.getMap("nodes");
