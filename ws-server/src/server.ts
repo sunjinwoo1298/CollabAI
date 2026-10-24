@@ -28,6 +28,16 @@ function getOrCreateRoom(roomId: string): CollaborativeRoom {
 
 // Create HTTP server for health checks & WebSocket upgrades
 const server = http.createServer((req, res) => {
+  if (req.method === "OPTIONS") {
+    res.writeHead(204, {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+      "Access-Control-Allow-Headers": "*",
+    });
+    res.end();
+    return;
+  }
+
   const parsedUrl = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
 
   if (parsedUrl.pathname === "/health" || parsedUrl.pathname === "/") {
@@ -36,7 +46,16 @@ const server = http.createServer((req, res) => {
       totalConnections += room.connectionCount;
     }
 
-    res.writeHead(200, { "Content-Type": "application/json" });
+    res.writeHead(200, {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*",
+    });
+
+    if (req.method === "HEAD") {
+      res.end();
+      return;
+    }
+
     res.end(
       JSON.stringify({
         status: "ok",
