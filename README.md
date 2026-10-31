@@ -183,6 +183,9 @@ TRIGGER_PROJECT_REF="proj_..."
 
 # Google Gemini AI
 GOOGLE_GENERATIVE_AI_API_KEY="AIzaSy..."
+
+#Groq API KEY
+GROQ_API_KEY=" "
 ```
 
 ### 3. Database Initialization
@@ -241,24 +244,3 @@ npm run test:presence
 npm run test:design-api
 ```
 
-### Performance & Benchmarking
-
-```bash
-# Run All Performance Benchmarks
-npm run bench
-
-# Run WebSocket Burst & Throughput Benchmark
-npm run bench:ws
-
-# Run Yjs In-Memory CRDT Sync Benchmark
-npm run bench:crdt
-
-# Run Database Latency & Query Decomposition Diagnostics
-npm run bench:db
-```
-
----
-
-## License
-
-This project is licensed under the MIT License.
